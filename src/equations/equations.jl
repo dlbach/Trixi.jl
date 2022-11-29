@@ -348,6 +348,10 @@ include("lattice_boltzmann_3d.jl")
 abstract type AbstractAcousticPerturbationEquations{NDIMS, NVARS} <: AbstractEquations{NDIMS, NVARS} end
 include("acoustic_perturbation_2d.jl")
 
+# Maxwell equations
+abstract type AbstractGLMMaxwellEquations{NDIMS, NVARS} <: AbstractEquations{NDIMS, NVARS} end
+include("maxwell_2d.jl")
+
 abstract type AbstractEquationsParabolic{NDIMS, NVARS} <: AbstractEquations{NDIMS, NVARS} end
 
 end # @muladd
