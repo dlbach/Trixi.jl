@@ -38,9 +38,17 @@ function initial_condition_test(x, t, equations::MaxwellEquations2D)
 end
 
 function initial_condition_free_stream_conversion(x, t, equations::MaxwellEquations2D)
-  return SVector(10.0,10.0,10.0)
+  return SVector(10.0,10.0,10.0/299792458.0)
 end
 
+function initial_condition_convergence(x, t, equations::MaxwellEquations2D)
+  c = 299792458.0  
+  e1 = sin(x[2])
+  e2 = -sin(x[1])
+  b = -(sin(x[1])+sin(x[2]))/c
+    
+  return SVector(e1,e2,b)
+end
 
 min_max_speed_naive(u_ll, u_rr, orientation, ::MaxwellEquations2D) = 299792458.0
 

@@ -9,7 +9,7 @@ flux = FluxLaxFriedrichs(min_max_speed_naive)
 equation = MaxwellEquations2D()
 mesh = TreeMesh((0.0, 0.0), (1.0, 1.0), initial_refinement_level=4, n_cells_max=10^4)
 solver = DGSEM(3, flux)
-semi = SemidiscretizationHyperbolic(mesh, equation, initial_condition_test, solver)
+semi = SemidiscretizationHyperbolic(mesh, equation, Trixi.initial_condition_convergence, solver)
 
 ###############################################################################
 # ODE solvers, callbacks etc.
