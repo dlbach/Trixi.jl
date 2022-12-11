@@ -348,6 +348,11 @@ include("lattice_boltzmann_3d.jl")
 abstract type AbstractAcousticPerturbationEquations{NDIMS, NVARS} <: AbstractEquations{NDIMS, NVARS} end
 include("acoustic_perturbation_2d.jl")
 
+# Linearized Euler equations
+abstract type AbstractLinearizedEulerEquations{NDIMS, NVARS} <: AbstractEquations{NDIMS, NVARS} end
+include("linearized_euler_2d.jl")
+>>>>>>> 707f7aa267987caf5fae643d55644e92a1b24c83
+
 # Maxwell equations
 abstract type AbstractGLMMaxwellEquations{NDIMS, NVARS} <: AbstractEquations{NDIMS, NVARS} end
 include("maxwell_2d.jl")

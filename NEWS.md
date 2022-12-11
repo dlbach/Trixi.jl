@@ -9,6 +9,10 @@ for human readability.
 
 #### Added
 
+- Implementation of linearized Euler equations in 2D
+- Experimental support for upwind finite difference summation by parts (FDSBP)
+  has been added in Trixi.jl v0.4.55. The first implementation requires a `TreeMesh` and comes
+  with several examples in the `examples_dir()` of Trixi.jl.
 - Experimental support for 2D parabolic diffusion terms has been added.
   * `LaplaceDiffusion2D` and `CompressibleNavierStokesDiffusion2D` can be used to add
   diffusion to systems. `LaplaceDiffusion2D` can be used to add scalar diffusion to each
