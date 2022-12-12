@@ -5,20 +5,32 @@ using Trixi
 ###############################################################################
 # semidiscretization of the Maxwell equations
 
-flux = FluxLaxFriedrichs(min_max_speed_naive)
 equation = MaxwellEquations2D()
-mesh = TreeMesh((-pi, -pi), (pi, pi), initial_refinement_level=4, n_cells_max=10^4)
-solver = DGSEM(3, flux)
-semi = SemidiscretizationHyperbolic(mesh, equation, Trixi.initial_condition_free_stream_conversion, solver)
+
+mesh = TreeMesh((-pi, -pi), (pi, pi), initial_refinement_level=2, n_cells_max=10^4)
+solver = DGSEM(3, Trixi.flux_upwind)
+semi = SemidiscretizationHyperbolic(mesh, equation, Trixi.initial_condition_convergence, solver)
+
 
 ###############################################################################
 # ODE solvers, callbacks etc.
 
-tspan = (0.0,1*2.0*pi/299792458.0)
+analysis_interval = 100
+analysis_callback = AnalysisCallback(semi, interval=analysis_interval, save_analysis=true)
+
+cfl = 1.0
+tspan = (0.0,1000*2*pi/299792458.0)
+
 ode = semidiscretize(semi,tspan)
 summary_callback = SummaryCallback()
-callbacks = CallbackSet(summary_callback)
+stepsize_callback = StepsizeCallback(cfl=cfl)
+callbacks = CallbackSet(summary_callback,analysis_callback,stepsize_callback)
 
 ###############################################################################
 # run the simulation
-sol = solve(ode, SSPRK43(), save_everystep=false, callback=callbacks)
+
+
+sol = solve(ode, CarpenterKennedy2N54(williamson_condition=false),
+            dt=1.0, # solve needs some value here but it will be overwritten by the stepsize_callback
+            save_everystep=false, callback=callbacks);
+
