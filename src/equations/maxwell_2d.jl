@@ -65,7 +65,6 @@ function initial_condition_test(x, t, equations::MaxwellEquations2D)
   return SVector(e1,e2,b)
 end
 
-<<<<<<< HEAD
 function initial_condition_free_stream_conversion(x, t, equations::MaxwellEquations2D)
   c = 299792458.0
   return SVector(10.0,10.0,10.0/c)
@@ -77,7 +76,7 @@ function initial_condition_convergence(x, t, equations::MaxwellEquations2D)
   e2 = -sin(x[1])
   b = -(sin(x[1])+sin(x[2]))/c
   
-=======
+
 function initial_condition_free_stream(x, t, equations::MaxwellEquations2D)
   return SVector(10.0,10.0,10.0/299792458.0)
 end
@@ -88,7 +87,6 @@ function initial_condition_convergence(x, t, equations::MaxwellEquations2D)
   e2 = -sin(x[1]+c*t)
   b = -(sin(x[1]+c*t)+sin(x[2]+c*t))/c
     
->>>>>>> 395ff1ffe0c4adbf1b68b4f73a8cd1d3364d5de3
   return SVector(e1,e2,b)
 end
 
