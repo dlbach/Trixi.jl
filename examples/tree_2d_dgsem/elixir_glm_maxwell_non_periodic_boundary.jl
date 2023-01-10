@@ -5,10 +5,15 @@ using Trixi
 ###############################################################################
 # semidiscretization of the Maxwell equations
 
-equation = MaxwellEquations2D()
-mesh = TreeMesh((-pi, -pi), (pi, pi), initial_refinement_level=2, n_cells_max=10^4)
-solver = DGSEM(3, Trixi.flux_upwind)
-semi = SemidiscretizationHyperbolic(mesh, equation, Trixi.initial_condition_convergence, solver)
+equation = GLMMaxwellEquations2D(2.0)
+boundary_conditions = (x_neg = Trixi.boundary_condition_irradiation,
+                       x_pos = Trixi.boundary_condition_truncation,
+					   y_neg = Trixi.boundary_condition_perfect_conducting_wall,
+					   y_pos = Trixi.boundary_condition_perfect_conducting_wall)
+mesh = TreeMesh((0.0, 0.0), (1.0, 1.0), initial_refinement_level=2, n_cells_max=10^4, periodicity = false)
+solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_upwind)
+semi = SemidiscretizationHyperbolic(mesh, equation, Trixi.initial_condition_test, solver,
+                                    boundary_conditions = boundary_conditions)
 
 ###############################################################################
 # ODE solvers, callbacks etc.
@@ -17,7 +22,7 @@ analysis_interval = 100
 analysis_callback = AnalysisCallback(semi, interval=analysis_interval, save_analysis=true)
 
 cfl = 1.0
-tspan = (0.0,1e-8)
+tspan = (0.0,1e-6)
 
 ode = semidiscretize(semi,tspan)
 summary_callback = SummaryCallback()
