@@ -163,7 +163,9 @@ end
                         alive_callback=TrivialCallback())
         end
       end
-      @test isempty(read(fname, String))
+      output = read(fname, String)
+      output = replace(output, "[ Info: You just called `trixi_include`. Julia may now compile the code, please be patient.\n" => "")
+      @test isempty(output)
     finally
       rm(fname, force=true)
     end
@@ -216,7 +218,7 @@ end
 
 
   # We use nonconservative terms
-  Trixi.have_nonconservative_terms(::NonconservativeLinearAdvectionEquation) = Val(true)
+  Trixi.have_nonconservative_terms(::NonconservativeLinearAdvectionEquation) = Trixi.True()
 
   function flux_nonconservative(u_mine, u_other, orientation,
                                 equations::NonconservativeLinearAdvectionEquation)
