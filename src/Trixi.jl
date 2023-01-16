@@ -133,7 +133,7 @@ export AcousticPerturbationEquations2D,
        InviscidBurgersEquation1D,
        LatticeBoltzmannEquations2D, LatticeBoltzmannEquations3D,
        ShallowWaterEquations1D, ShallowWaterEquations2D,
-       LinearizedEulerEquations2D
+       LinearizedEulerEquations2D, MaxwellEquations2D, GLMMaxwellEquations2D
 
 export LaplaceDiffusion2D,
        CompressibleNavierStokesDiffusion2D
