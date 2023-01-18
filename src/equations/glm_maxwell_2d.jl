@@ -11,7 +11,6 @@ struct GLMMaxwellEquations2D{RealT<:Real} <: AbstractGLMMaxwellEquations{2,4}
   end
 end
 
-
 @inline function flux(u, orientation::Integer, equations::GLMMaxwellEquations2D)
   c_sqr = 299792458.0^2
   if orientation == 1
@@ -62,7 +61,6 @@ end
 
 @inline function flux_upwind(u_ll, u_rr, normal_direction::AbstractVector, equations::GLMMaxwellEquations2D)
   c = 299792458.0
-  normal_direction /= norm(normal_direction) 
   u_sum = u_ll + u_rr
   u_diff = u_ll - u_rr
   flux_component_1 = equations.c_h * ( normal_direction[1] * u_diff[1] + normal_direction[2] * u_diff[2] ) + c * u_sum[4]
@@ -91,34 +89,20 @@ function boundary_condition_perfect_conducting_wall(u_inner, orientation, direct
   end
 end
 
-function boundary_condition_perfect_conducting_wall(u_inner, normal_direction::AbstractVector, x, t,
+function boundary_condition_perfect_conducting_wall(u_inner, normal_direction::AbstractVector, direction, x, t,
                                       surface_flux_function, equations::GLMMaxwellEquations2D)
 
   c = 299792458.0
-  normal_direction /= norm(normal_direction)
-  psi_outer = u_inner[4] - 2.0 * equations.c_h * ( normal_direction[1] * u_inner[1] + normal_direction[2] * u_inner[2]) / c
-  
-  return surface_flux_function(u_inner, SVector(-u_inner[1], -u_inner[2], u_inner[3], u_inner[4]), normal_direction, equations)
-end
-
-function boundary_condition_irradiation(u_inner, orientation, direction, x, t,
-                                      surface_flux_function, equations::GLMMaxwellEquations2D)
-  c = 299792458.0
-  c_sqr = 299792458.0^2
-  k_orth = pi
-  k_par = pi
-  omega = sqrt(k_orth^2 + k_par^2)*c
-  e1 = -(k_orth/k_par)*sin(k_orth*x[2])*cos(k_par*x[1]-omega*t)
-  e2 = cos(k_orth*x[2])*sin(k_par*x[1]-omega*t)
+  psi_outer = 2.0 * equations.c_h * ( normal_direction[1] * u_inner[1] + normal_direction[2] * u_inner[2]) / c
   
   if iseven(direction)
-    return surface_flux_function(u_inner, SVector(2.0*e1-u_inner[1], 2.0*e2-u_inner[2], u_inner[3], u_inner[4]), orientation, equations)
+    return surface_flux_function(u_inner, SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] - psi_outer), normal_direction, equations)
   else
-    return surface_flux_function(SVector(2.0*e1-u_inner[1], 2.0*e2-u_inner[2], u_inner[3], u_inner[4]), u_inner, orientation, equations)
+    return -surface_flux_function(u_inner, SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] + psi_outer), -normal_direction, equations)
   end
 end
 
-function boundary_condition_irradiation(u_inner, normal_direction::AbstractVector, x, t,
+function boundary_condition_irradiation(u_inner, orientation_or_normal_direction, direction, x, t,
                                       surface_flux_function, equations::GLMMaxwellEquations2D)
   c = 299792458.0
   c_sqr = 299792458.0^2
@@ -127,7 +111,11 @@ function boundary_condition_irradiation(u_inner, normal_direction::AbstractVecto
   omega = sqrt(k_orth^2 + k_par^2)*c
   e1 = -(k_orth/k_par)*sin(k_orth*x[2])*cos(k_par*x[1]-omega*t)
   e2 = cos(k_orth*x[2])*sin(k_par*x[1]-omega*t)
-  return surface_flux_function(u_inner, SVector(2.0*e1-u_inner[1], 2.0*e2-u_inner[2], u_inner[3], u_inner[4]), normal_direction, equations)
+  if iseven(direction)
+    return surface_flux_function(u_inner, SVector(2.0*e1-u_inner[1], 2.0*e2-u_inner[2], u_inner[3], u_inner[4]), orientation_or_normal_direction, equations)
+  else
+    return surface_flux_function(SVector(2.0*e1-u_inner[1], 2.0*e2-u_inner[2], u_inner[3], u_inner[4]), u_inner, orientation_or_normal_direction, equations)
+  end
 end
 
 
@@ -166,7 +154,7 @@ function initial_condition_free_stream(x, t, equations::GLMMaxwellEquations2D)
   return SVector(10.0,10.0,10.0,10.0)
 end
 
-function initial_condition_convergence(x, t, equations::GLMMaxwellEquations2D)
+function initial_condition_convergence_test(x, t, equations::GLMMaxwellEquations2D)
   c = 299792458.0  
   e1 = sin(x[2]+c*t)
   e2 = -sin(x[1]+c*t)

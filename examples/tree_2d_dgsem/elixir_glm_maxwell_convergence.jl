@@ -8,7 +8,7 @@ using Trixi
 equation = GLMMaxwellEquations2D(2.0)
 mesh = TreeMesh((-pi, -pi), (pi, pi), initial_refinement_level=2, n_cells_max=10^4)
 solver = DGSEM(3, Trixi.flux_upwind)
-semi = SemidiscretizationHyperbolic(mesh, equation, Trixi.initial_condition_convergence, solver)
+semi = SemidiscretizationHyperbolic(mesh, equation, Trixi.initial_condition_convergence_test, solver)
 
 ###############################################################################
 # ODE solvers, callbacks etc.
@@ -17,7 +17,7 @@ analysis_interval = 100
 analysis_callback = AnalysisCallback(semi, interval=analysis_interval, save_analysis=true)
 
 cfl = 1.0
-tspan = (0.0,1e-8)
+tspan = (0.0,1e-7)
 
 ode = semidiscretize(semi,tspan)
 summary_callback = SummaryCallback()

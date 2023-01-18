@@ -8,8 +8,8 @@ using Trixi
 equation = GLMMaxwellEquations2D(2.0)
 boundary_conditions = (x_neg = Trixi.boundary_condition_irradiation,
                        x_pos = Trixi.boundary_condition_irradiation,
-					   y_neg = Trixi.boundary_condition_perfect_conducting_wall,
-					   y_pos = Trixi.boundary_condition_perfect_conducting_wall)
+					   y_neg = Trixi.boundary_condition_irradiation,
+					   y_pos = Trixi.boundary_condition_irradiation)
 mesh = TreeMesh((0.0, 0.0), (1.0, 1.0), initial_refinement_level=2, n_cells_max=10^4, periodicity = false)
 solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_upwind)
 semi = SemidiscretizationHyperbolic(mesh, equation, Trixi.initial_condition_test, solver,
@@ -24,7 +24,7 @@ analysis_callback = AnalysisCallback(semi, interval=analysis_interval, save_anal
 save_solution_callback = SaveSolutionCallback(interval = 100000, save_initial_solution=false, save_final_solution=true, output_directory="out")
 
 cfl = 1.0
-tspan = (0.0,1e-6)
+tspan = (0.0,1e-7)
 
 ode = semidiscretize(semi,tspan)
 summary_callback = SummaryCallback()
