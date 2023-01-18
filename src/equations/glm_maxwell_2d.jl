@@ -26,7 +26,18 @@ end
     f4 = equations.c_h^2 * u[2]
   end
   
-  return Trixi.SVector(f1,f2,f3,f4)
+  return SVector(f1,f2,f3,f4)
+end
+
+@inline function flux(u, normal_direction::AbstractVector, equations::GLMMaxwellEquations2D)
+  c_sqr = 299792458.0^2
+
+  f1 = c_sqr * ( normal_direction[1] * u[4] - normal_direction[2] * u[3] )
+  f2 = c_sqr * ( normal_direction[1] * u[3] + normal_direction[2] * u[4] )
+  f3 = normal_direction[1] * u[2] - normal_direction[2] * u[1]
+  f4 = equations.c_h^2 * ( normal_direction[1] * u[1] + normal_direction[2] * u[2] )
+
+  return SVector(f1,f2,f3,f4)
 end
 
 @inline function flux_upwind(u_ll, u_rr, orientation::Integer, equations::GLMMaxwellEquations2D)
@@ -45,12 +56,13 @@ end
 	f4 = 0.5 * equations.c_h * ( equations.c_h * u_sum[2] + c * u_diff[4] )
   end
   
-  return Trixi.SVector(f1,f2,f3,f4)
+  return SVector(f1,f2,f3,f4)
 end
 
 
 @inline function flux_upwind(u_ll, u_rr, normal_direction::AbstractVector, equations::GLMMaxwellEquations2D)
   c = 299792458.0
+  normal_direction /= norm(normal_direction) 
   u_sum = u_ll + u_rr
   u_diff = u_ll - u_rr
   flux_component_1 = equations.c_h * ( normal_direction[1] * u_diff[1] + normal_direction[2] * u_diff[2] ) + c * u_sum[4]
@@ -61,7 +73,7 @@ end
   f3 = 0.5 * ( normal_direction[1] * u_sum[2] - normal_direction[2] * u_sum[1] + c * u_diff[3] )
   f4 = 0.5 * equations.c_h * ( equations.c_h * ( normal_direction[1] * u_sum[1] + normal_direction[2] * u_sum[2] ) + c * u_diff[4] ) 
 
-  return Trixi.SVector(f1,f2,f3,f4)
+  return SVector(f1,f2,f3,f4)
 end
 
 function boundary_condition_perfect_conducting_wall(u_inner, orientation, direction, x, t,
@@ -83,6 +95,7 @@ function boundary_condition_perfect_conducting_wall(u_inner, normal_direction::A
                                       surface_flux_function, equations::GLMMaxwellEquations2D)
 
   c = 299792458.0
+  normal_direction /= norm(normal_direction)
   psi_outer = u_inner[4] - 2.0 * equations.c_h * ( normal_direction[1] * u_inner[1] + normal_direction[2] * u_inner[2]) / c
   
   return surface_flux_function(u_inner, SVector(-u_inner[1], -u_inner[2], u_inner[3], u_inner[4]), normal_direction, equations)
