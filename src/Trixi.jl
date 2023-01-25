@@ -106,7 +106,6 @@ include("equations/equations.jl")
 include("meshes/meshes.jl")
 include("solvers/solvers.jl")
 include("equations/equations_parabolic.jl") # these depend on parabolic solver types
-include("equations/equations_stc.jl")
 include("semidiscretization/semidiscretization.jl")
 include("semidiscretization/semidiscretization_hyperbolic.jl")
 include("semidiscretization/semidiscretization_hyperbolic_parabolic.jl")
@@ -134,7 +133,7 @@ export AcousticPerturbationEquations2D,
        InviscidBurgersEquation1D,
        LatticeBoltzmannEquations2D, LatticeBoltzmannEquations3D,
        ShallowWaterEquations1D, ShallowWaterEquations2D,
-       LinearizedEulerEquations2D, MaxwellEquations2D, GLMMaxwellEquations2D
+       LinearizedEulerEquations2D, GLMMaxwellEquations2D
 
 
 export LaplaceDiffusion2D,
