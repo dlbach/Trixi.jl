@@ -382,4 +382,5 @@ include("glm_maxwell_2d.jl")
 
 abstract type AbstractEquationsParabolic{NDIMS, NVARS} <: AbstractEquations{NDIMS, NVARS} end
 
+
 end # @muladd

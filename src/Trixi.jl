@@ -106,6 +106,7 @@ include("equations/equations.jl")
 include("meshes/meshes.jl")
 include("solvers/solvers.jl")
 include("equations/equations_parabolic.jl") # these depend on parabolic solver types
+include("equations/equations_stc.jl")
 include("semidiscretization/semidiscretization.jl")
 include("semidiscretization/semidiscretization_hyperbolic.jl")
 include("semidiscretization/semidiscretization_hyperbolic_parabolic.jl")

@@ -131,13 +131,6 @@ function initial_condition_free_stream_conversion(x, t, equations::MaxwellEquati
   return SVector(10.0,10.0,10.0/c)
 end
 
-function initial_condition_convergence(x, t, equations::MaxwellEquations2D)
-  c = 299792458.0
-  e1 = sin(x[2])
-  e2 = -sin(x[1])
-  b = -(sin(x[1])+sin(x[2]))/c
-  
-
 function initial_condition_free_stream(x, t, equations::MaxwellEquations2D)
   return SVector(10.0,10.0,10.0/299792458.0)
 end
