@@ -102,22 +102,6 @@ function boundary_condition_perfect_conducting_wall(u_inner, normal_direction::A
   end
 end
 
-function boundary_condition_irradiation(u_inner, orientation_or_normal_direction, direction, x, t,
-                                      surface_flux_function, equations::GLMMaxwellEquations2D)
-  c = 299792458.0
-  c_sqr = 299792458.0^2
-  k_orth = pi
-  k_par = pi
-  omega = sqrt(k_orth^2 + k_par^2)*c
-  e1 = -(k_orth/k_par)*sin(k_orth*x[2])*cos(k_par*x[1]-omega*t)
-  e2 = cos(k_orth*x[2])*sin(k_par*x[1]-omega*t)
-  if iseven(direction)
-    return surface_flux_function(u_inner, SVector(2.0*e1-u_inner[1], 2.0*e2-u_inner[2], u_inner[3], u_inner[4]), orientation_or_normal_direction, equations)
-  else
-    return surface_flux_function(SVector(2.0*e1-u_inner[1], 2.0*e2-u_inner[2], u_inner[3], u_inner[4]), u_inner, orientation_or_normal_direction, equations)
-  end
-end
-
 
 function boundary_condition_truncation(u_inner, orientation, direction, x, t,
                                       surface_flux_function, equations::GLMMaxwellEquations2D)
