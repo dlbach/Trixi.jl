@@ -102,22 +102,6 @@ function boundary_condition_perfect_conducting_wall(u_inner, normal_direction::A
   end
 end
 
-
-function boundary_condition_truncation(u_inner, orientation, direction, x, t,
-                                      surface_flux_function, equations::GLMMaxwellEquations2D)
-  if iseven(direction)
-    return surface_flux_function(u_inner, SVector(0.0,0.0,0.0,0.0), orientation, equations)
-  else
-    return surface_flux_function(SVector(0.0,0.0,0.0,0.0), u_inner, orientation, equations)
-  end
-end
-
-function boundary_condition_truncation(u_inner, normal_direction::AbstractVector, x, t,
-                                      surface_flux_function, equations::GLMMaxwellEquations2D)									  
-  return surface_flux_function(u_inner, u_inner, normal_direction, equations)
-end
-
-
 varnames(::typeof(cons2cons), ::GLMMaxwellEquations2D) = ("E1","E2","B","psi")
 varnames(::typeof(cons2prim), ::GLMMaxwellEquations2D) = ("E1","E2","B","psi")
 
