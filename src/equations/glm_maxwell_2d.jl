@@ -117,7 +117,7 @@ function initial_condition_test(x, t, equations::GLMMaxwellEquations2D)
 end
 
 function initial_condition_free_stream(x, t, equations::GLMMaxwellEquations2D)
-  return SVector(10.0,10.0,10.0,10.0)
+  return SVector(10.0,10.0,10.0/299792458.0,10.0/299792458.0)
 end
 
 function initial_condition_convergence_test(x, t, equations::GLMMaxwellEquations2D)
