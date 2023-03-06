@@ -4,7 +4,7 @@ using Trixi
 
 ###############################################################################
 # semidiscretization of the Maxwell equations
-"""
+
 f1(xi) = SVector(xi/sqrt(2), -sqrt( 1.0 - 0.5 * xi^2 ))
 f2(xi) = SVector(xi/sqrt(2), sqrt( 1.0 - 0.5 * xi^2 ))
 f3(eta) = SVector(-sqrt( 1.0 - 0.5 * eta^2 ), eta/sqrt(2))
@@ -14,7 +14,9 @@ f1(xi) = SVector(0.2*cos((xi+1.0)*pi),0.2*sin((xi+1.0)*pi))
 f2(xi) = SVector(cos((xi+1.0)*pi),sin((xi+1.0)*pi))
 f3(eta) = SVector(0.4*(eta+1.0)+0.2,0.0)
 f4(eta) = SVector(0.4*(eta+1.0)+0.2,0.0)
-cells_per_dimension = (10, 10)
+"""
+
+cells_per_dimension = (4, 4)
 
 function boundary_condition_irradiation(u_inner, orientation_or_normal_direction, direction, x, t,
   surface_flux_function, equations::GLMMaxwellEquations2D)
@@ -38,12 +40,13 @@ function initial_condition_zero(x, t, equations::GLMMaxwellEquations2D)
 end
 
 equation = GLMMaxwellEquations2D(2.0)
-#boundary_conditions = Trixi.boundary_condition_perfect_conducting_wall
+boundary_conditions = Trixi.boundary_condition_perfect_conducting_wall
+"""
 boundary_conditions = (y_neg = Trixi.boundary_condition_periodic,
                        y_pos = Trixi.boundary_condition_periodic,
 					   x_neg = Trixi.boundary_condition_perfect_conducting_wall,
-					   x_pos = Trixi.boundary_condition_perfect_conducting_wall)
-mesh = StructuredMesh(cells_per_dimension, (f1,f2,f3,f4), periodicity = (false, true))
+					   x_pos = Trixi.boundary_condition_perfect_conducting_wall)"""
+mesh = StructuredMesh(cells_per_dimension, (f1,f2,f3,f4), periodicity = false)
 solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_upwind)
 semi = SemidiscretizationHyperbolic(mesh, equation, initial_condition_zero, solver,
                                     boundary_conditions = boundary_conditions, source_terms = source_term_function)
@@ -56,7 +59,7 @@ analysis_interval = 100000
 analysis_callback = AnalysisCallback(semi, interval=analysis_interval, save_analysis=true)
 save_solution_callback = SaveSolutionCallback(interval = 100000, save_initial_solution=false, save_final_solution=true, output_directory="out")
 
-cfl = 0.05
+cfl = 0.2
 tspan = (0.0,1e-6)
 
 ode = semidiscretize(semi,tspan)
