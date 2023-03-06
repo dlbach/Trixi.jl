@@ -16,7 +16,7 @@ f3(eta) = SVector(0.4*(eta+1.0)+0.2,0.0)
 f4(eta) = SVector(0.4*(eta+1.0)+0.2,0.0)
 """
 
-cells_per_dimension = (4, 4)
+cells_per_dimension = (10, 10)
 
 function boundary_condition_irradiation(u_inner, orientation_or_normal_direction, direction, x, t,
   surface_flux_function, equations::GLMMaxwellEquations2D)
@@ -35,7 +35,7 @@ function initial_condition_zero(x, t, equations::GLMMaxwellEquations2D)
   if t > 0.0
     return SVector(x[1], x[2], 0.0, 0.0)
   else 
-    return SVector(0.0, 0.0, 0.0, 0.0)
+    return SVector(x[1], x[2], 0.0, 0.0)
   end
 end
 
@@ -60,7 +60,7 @@ analysis_callback = AnalysisCallback(semi, interval=analysis_interval, save_anal
 save_solution_callback = SaveSolutionCallback(interval = 100000, save_initial_solution=false, save_final_solution=true, output_directory="out")
 
 cfl = 0.2
-tspan = (0.0,1e-6)
+tspan = (0.0,1e-10)
 
 ode = semidiscretize(semi,tspan)
 summary_callback = SummaryCallback()

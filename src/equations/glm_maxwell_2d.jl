@@ -91,13 +91,12 @@ end
 
 function boundary_condition_perfect_conducting_wall(u_inner, normal_direction::AbstractVector, direction, x, t,
                                       surface_flux_function, equations::GLMMaxwellEquations2D)
-
   c = 299792458.0
-  psi_outer = 2.0 * equations.c_h * ( norm_[1] * u_inner[1] + norm_[2] * u_inner[2]) / c
+  psi_outer = 2.0 * equations.c_h * ( normal_direction[1] * u_inner[1] + normal_direction[2] * u_inner[2]) / c
   if iseven(direction)
-    return surface_flux_function(u_inner, SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] - psi_outer), norm_, equations)
+    return surface_flux_function(u_inner, SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] - psi_outer), normal_direction, equations)
   else
-    return -surface_flux_function(u_inner, SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] + psi_outer), -norm_, equations)
+    return -surface_flux_function(u_inner, SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] + psi_outer), -normal_direction, equations)
   end
 end
 
