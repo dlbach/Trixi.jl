@@ -16,7 +16,7 @@ f3(eta) = SVector(0.4*(eta+1.0)+0.2,0.0)
 f4(eta) = SVector(0.4*(eta+1.0)+0.2,0.0)
 """
 
-cells_per_dimension = (3, 3)
+cells_per_dimension = (5, 5)
 
 function boundary_condition_irradiation(u_inner, orientation_or_normal_direction, direction, x, t,
   surface_flux_function, equations::GLMMaxwellEquations2D)
@@ -31,7 +31,7 @@ function source_term_function(u, x, t, equations::GLMMaxwellEquations2D)
   return SVector(0.0, 0.0, 0.0, equations.c_h^2 * 2.0)
 end
 
-boundary_dir(x,t,equations::GLMMaxwellEquations2D) = SVector(x[1],x[2],0.0,0.0)
+boundary_dir(x,t,equations::GLMMaxwellEquations2D) = SVector(x[1], x[2], 0.0, 0.0)
 
 function initial_condition_zero(x, t, equations::GLMMaxwellEquations2D)
   if t > 0.0
@@ -41,8 +41,8 @@ function initial_condition_zero(x, t, equations::GLMMaxwellEquations2D)
   end
 end
 
-equation = GLMMaxwellEquations2D(200.0)
-boundary_conditions = BoundaryConditionDirichlet(boundary_dir)
+equation = GLMMaxwellEquations2D(1000.0)
+boundary_conditions = Trixi.boundary_condition_perfect_conducting_wall
 """
 boundary_conditions = (y_neg = Trixi.boundary_condition_periodic,
                        y_pos = Trixi.boundary_condition_periodic,
@@ -61,8 +61,8 @@ analysis_interval = 100000
 analysis_callback = AnalysisCallback(semi, interval=analysis_interval, save_analysis=true)
 save_solution_callback = SaveSolutionCallback(interval = 100000, save_initial_solution=false, save_final_solution=true, output_directory="out")
 
-cfl = 0.2
-tspan = (0.0,1e-9)
+cfl = 0.3
+tspan = (0.0,1e-7)
 
 ode = semidiscretize(semi,tspan)
 summary_callback = SummaryCallback()
