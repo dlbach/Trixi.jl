@@ -18,25 +18,25 @@ end
 
 
 function boundary_value_function(x, t, equations::GLMMaxwellEquations2D)
-  return SVector(2.0*x[1], 0.0, 0.0, 0.0)
+  return SVector(0.0, 0.0, 0.0, 0.0)
 end
 
 
 function source_term_function(u, x, t, equations::GLMMaxwellEquations2D)
-  return SVector(0.0, 0.0, 0.0, equations.c_h^2 * 2.0)
+  return SVector(0.0, 0.0, 0.0, 0.0)
 end
 
 function initial_condition_zero(x, t, equations::GLMMaxwellEquations2D)
   if t > 0.0
-    return SVector(2.0*x[1], 0.0 , 0.0, 0.0)
-  else 
     return SVector(0.0, 0.0, 0.0, 0.0)
+  else 
+    return SVector(x[1], x[2], 0.0, 0.0)
   end
 end
 
 equation = GLMMaxwellEquations2D(2.0)
-boundary_conditions = (x_neg = Trixi.boundary_condition_perfect_conducting_wall,
-                       x_pos = Trixi.boundary_condition_perfect_conducting_wall,
+boundary_conditions = (x_neg = BoundaryConditionDirichlet(boundary_value_function),
+                       x_pos = BoundaryConditionDirichlet(boundary_value_function),
 					   y_neg = BoundaryConditionDirichlet(boundary_value_function),
 					   y_pos = BoundaryConditionDirichlet(boundary_value_function))
 mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), initial_refinement_level=2, n_cells_max=10^4, periodicity = false)
