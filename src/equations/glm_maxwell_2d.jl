@@ -52,7 +52,7 @@ end
     f1 = 0.5 * c * ( u_diff[1] - c * u_sum[3] )
     f2 = 0.5 * c * ( equations.c_h * u_diff[2] + c * u_sum[4] )
     f3 = 0.5 * ( c * u_diff[3] - u_sum[1] )
-	f4 = 0.5 * equations.c_h * ( equations.c_h * u_sum[2] + c * u_diff[4] )
+	  f4 = 0.5 * equations.c_h * ( equations.c_h * u_sum[2] + c * u_diff[4] )
   end
   
   return SVector(f1,f2,f3,f4)

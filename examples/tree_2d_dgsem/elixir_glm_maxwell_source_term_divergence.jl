@@ -37,7 +37,7 @@ analysis_interval = 100
 analysis_callback = AnalysisCallback(semi, interval=analysis_interval, save_analysis=true)
 save_solution_callback = SaveSolutionCallback(interval = 100, save_initial_solution=false, save_final_solution=true, output_directory="out")
 
-cfl = 0.5
+cfl = 0.5e-1
 tspan = (0.0,1e-8)
 
 ode = semidiscretize(semi,tspan)
