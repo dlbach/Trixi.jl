@@ -99,8 +99,8 @@ end
 
 function rhs!(du, u, t,
               mesh::Union{TreeMesh{2}, P4estMesh{2}}, equations,
-              initial_condition, boundary_conditions, source_terms,
-              dg::DG, cache)
+              initial_condition, boundary_conditions, source_terms::Source,
+              dg::DG, cache) where {Source}
   # Reset du
   @trixi_timeit timer() "reset ∂u/∂t" reset_du!(du, dg, cache)
 
@@ -225,7 +225,7 @@ end
 
     # All diagonal entries of `derivative_split` are zero. Thus, we can skip
     # the computation of the diagonal terms. In addition, we use the symmetry
-    # of the `volume_flux` to save half of the possible two-poitn flux
+    # of the `volume_flux` to save half of the possible two-point flux
     # computations.
 
     # x direction
@@ -702,7 +702,7 @@ end
 
 function calc_boundary_flux_by_direction!(surface_flux_values::AbstractArray{<:Any,4}, t,
                                           boundary_condition, nonconservative_terms::True, equations,
-                                          surface_integral ,dg::DG, cache,
+                                          surface_integral, dg::DG, cache,
                                           direction, first_boundary, last_boundary)
   surface_flux, nonconservative_flux = surface_integral.surface_flux
   @unpack u, neighbor_ids, neighbor_sides, node_coordinates, orientations = cache.boundaries
@@ -870,7 +870,7 @@ function calc_mortar_flux!(surface_flux_values,
 
     # Add nonconservative fluxes.
     # These need to be adapted on the geometry (left/right) since the order of
-    # the arguments matters, based on the global SBP operator intepretation.
+    # the arguments matters, based on the global SBP operator interpretation.
     # The same interpretation (global SBP operators coupled discontinuously via
     # central fluxes/SATs) explains why we need the factor 0.5.
     # Alternatively, you can also follow the argumentation of Bohm et al. 2018
@@ -883,7 +883,7 @@ function calc_mortar_flux!(surface_flux_values,
         # Call pointwise nonconservative term
         noncons_upper = nonconservative_flux(u_upper_ll, u_upper_rr, orientation, equations)
         noncons_lower = nonconservative_flux(u_lower_ll, u_lower_rr, orientation, equations)
-        # Add to primary and secondary temporay storage
+        # Add to primary and secondary temporary storage
         multiply_add_to_node_vars!(fstar_upper, 0.5, noncons_upper, equations, dg, i)
         multiply_add_to_node_vars!(fstar_lower, 0.5, noncons_lower, equations, dg, i)
       end
@@ -895,7 +895,7 @@ function calc_mortar_flux!(surface_flux_values,
         # Call pointwise nonconservative term
         noncons_upper = nonconservative_flux(u_upper_rr, u_upper_ll, orientation, equations)
         noncons_lower = nonconservative_flux(u_lower_rr, u_lower_ll, orientation, equations)
-        # Add to primary and secondary temporay storage
+        # Add to primary and secondary temporary storage
         multiply_add_to_node_vars!(fstar_upper, 0.5, noncons_upper, equations, dg, i)
         multiply_add_to_node_vars!(fstar_lower, 0.5, noncons_lower, equations, dg, i)
       end
