@@ -441,6 +441,16 @@ abstract type AbstractLinearizedEulerEquations{NDIMS, NVARS} <:
               AbstractEquations{NDIMS, NVARS} end
 include("linearized_euler_2d.jl")
 
+# Maxwell Equations
+abstract type AbstractMaxwellEquations{NDIMS, NVARS} <:
+    AbstractEquations{NDIMS, NVARS} end
+include("maxwell_2d.jl")
+
+# GLM-Maxwell Equations
+abstract type AbstractGLMMaxwellEquations{NDIMS, NVARS} <:
+    AbstractEquations{NDIMS, NVARS} end
+include("glm_maxwell_2d.jl")
+
 abstract type AbstractEquationsParabolic{NDIMS, NVARS} <:
               AbstractEquations{NDIMS, NVARS} end
 end # @muladd
