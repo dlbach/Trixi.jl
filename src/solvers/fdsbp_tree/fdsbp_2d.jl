@@ -39,8 +39,7 @@
         )
         f = StructArray([(u_node, u_node)])
         f_minus_plus_threaded = [
-            similar(f, ntuple(_ -> nnodes(dg), ndims(mesh))...) for
-            _ = 1:Threads.nthreads()
+            similar(f, ntuple(_ -> nnodes(dg), ndims(mesh))...) for _ = 1:Threads.nthreads()
         ]
 
         f_minus, f_plus = StructArrays.components(f_minus_plus_threaded[1])

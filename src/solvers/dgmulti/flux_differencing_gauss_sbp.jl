@@ -428,12 +428,10 @@ end
 
         nvars = nvariables(equations)
         rhs_volume_local_threaded = [
-            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for
-            _ = 1:Threads.nthreads()
+            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for _ = 1:Threads.nthreads()
         ]
         gauss_volume_local_threaded = [
-            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for
-            _ = 1:Threads.nthreads()
+            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for _ = 1:Threads.nthreads()
         ]
 
         return (;

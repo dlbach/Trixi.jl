@@ -175,8 +175,7 @@
 
         # local storage for volume integral and source computations
         local_values_threaded = [
-            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for
-            _ = 1:Threads.nthreads()
+            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for _ = 1:Threads.nthreads()
         ]
 
         # For curved meshes, we interpolate geometric terms from nodal points to quadrature points.
@@ -192,8 +191,7 @@
             _ = 1:Threads.nthreads()
         ]
         rotated_flux_threaded = [
-            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for
-            _ = 1:Threads.nthreads()
+            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for _ = 1:Threads.nthreads()
         ]
 
         return (;

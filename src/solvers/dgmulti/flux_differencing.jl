@@ -382,8 +382,7 @@
         lift_scalings = rd.wf ./ rd.wq[rd.Fmask] # lift scalings for diag-norm SBP operators
 
         local_values_threaded = [
-            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for
-            _ = 1:Threads.nthreads()
+            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for _ = 1:Threads.nthreads()
         ]
 
         # Use an array of SVectors (chunks of `nvars` are contiguous in memory) to speed up flux differencing
@@ -444,8 +443,7 @@
 
         # local storage for interface fluxes, rhs, and source
         local_values_threaded = [
-            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for
-            _ = 1:Threads.nthreads()
+            allocate_nested_array(uEltype, nvars, (rd.Nq,), dg) for _ = 1:Threads.nthreads()
         ]
 
         # Use an array of SVectors (chunks of `nvars` are contiguous in memory) to speed up flux differencing
