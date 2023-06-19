@@ -76,11 +76,9 @@ w_2 = \frac{\rho v_1}{p},\, w_3 = \frac{\rho v_2}{p},\, w_4 = \frac{\rho v_3}{p}
 #!!! warning "Experimental code"
 #    This code is experimental and may be changed or removed in any future release.
 """
-struct CompressibleNavierStokesDiffusion3D{
-    GradientVariables,
-    RealT<:Real,
-    E<:AbstractCompressibleEulerEquations{3},
-} <: AbstractCompressibleNavierStokesDiffusion{3,5}
+struct CompressibleNavierStokesDiffusion3D{GradientVariables, RealT <: Real,
+                                           E <: AbstractCompressibleEulerEquations{3}} <:
+       AbstractCompressibleNavierStokesDiffusion{3, 5}
     # TODO: parabolic
     # 1) For now save gamma and inv(gamma-1) again, but could potentially reuse them from the Euler equations
     # 2) Add NGRADS as a type parameter here and in AbstractEquationsParabolic, add `ngradients(...)` accessor function
@@ -96,12 +94,9 @@ struct CompressibleNavierStokesDiffusion3D{
 end
 
 # default to primitive gradient variables
-function CompressibleNavierStokesDiffusion3D(
-    equations::CompressibleEulerEquations3D;
-    mu,
-    Prandtl,
-    gradient_variables = GradientVariablesPrimitive(),
-)
+function CompressibleNavierStokesDiffusion3D(equations::CompressibleEulerEquations3D;
+                                             mu, Prandtl,
+                                             gradient_variables = GradientVariablesPrimitive())
     gamma = equations.gamma
     inv_gamma_minus_one = equations.inv_gamma_minus_one
     μ, Pr = promote(mu, Prandtl)
@@ -111,19 +106,10 @@ function CompressibleNavierStokesDiffusion3D(
     # Important note! Factor of μ is accounted for later in `flux`.
     kappa = gamma * inv_gamma_minus_one / Pr
 
-    CompressibleNavierStokesDiffusion3D{
-        typeof(gradient_variables),
-        typeof(gamma),
-        typeof(equations),
-    }(
-        gamma,
-        inv_gamma_minus_one,
-        μ,
-        Pr,
-        kappa,
-        equations,
-        gradient_variables,
-    )
+    CompressibleNavierStokesDiffusion3D{typeof(gradient_variables), typeof(gamma),
+                                        typeof(equations)}(gamma, inv_gamma_minus_one,
+                                                           μ, Pr, kappa,
+                                                           equations, gradient_variables)
 end
 
 # TODO: parabolic
@@ -131,41 +117,42 @@ end
 # varnames(::typeof(cons2prim)   , ::CompressibleNavierStokesDiffusion3D) = ("v1", "v2", "v3", "T")
 # varnames(::typeof(cons2entropy), ::CompressibleNavierStokesDiffusion3D) = ("w2", "w3", "w4", "w5")
 
-varnames(variable_mapping, equations_parabolic::CompressibleNavierStokesDiffusion3D) =
+function varnames(variable_mapping,
+                  equations_parabolic::CompressibleNavierStokesDiffusion3D)
     varnames(variable_mapping, equations_parabolic.equations_hyperbolic)
+end
 
 # we specialize this function to compute gradients of primitive variables instead of
 # conservative variables.
-gradient_variable_transformation(
-    ::CompressibleNavierStokesDiffusion3D{GradientVariablesPrimitive},
-) = cons2prim
-gradient_variable_transformation(
-    ::CompressibleNavierStokesDiffusion3D{GradientVariablesEntropy},
-) = cons2entropy
-
+function gradient_variable_transformation(::CompressibleNavierStokesDiffusion3D{
+                                                                                GradientVariablesPrimitive
+                                                                                })
+    cons2prim
+end
+function gradient_variable_transformation(::CompressibleNavierStokesDiffusion3D{
+                                                                                GradientVariablesEntropy
+                                                                                })
+    cons2entropy
+end
 
 # Explicit formulas for the diffusive Navier-Stokes fluxes are available, e.g., in Section 2
 # of the paper by Rueda-Ramírez, Hennemann, Hindenlang, Winters, and Gassner
 # "An Entropy Stable Nodal Discontinuous Galerkin Method for the resistive
 #  MHD Equations. Part II: Subcell Finite Volume Shock Capturing"
 # where one sets the magnetic field components equal to 0.
-function flux(
-    u,
-    gradients,
-    orientation::Integer,
-    equations::CompressibleNavierStokesDiffusion3D,
-)
+function flux(u, gradients, orientation::Integer,
+              equations::CompressibleNavierStokesDiffusion3D)
     # Here, `u` is assumed to be the "transformed" variables specified by `gradient_variable_transformation`.
     rho, v1, v2, v3, _ = convert_transformed_to_primitive(u, equations)
     # Here `gradients` is assumed to contain the gradients of the primitive variables (rho, v1, v2, v3, T)
     # either computed directly or reverse engineered from the gradient of the entropy variables
     # by way of the `convert_gradient_variables` function.
-    _, dv1dx, dv2dx, dv3dx, dTdx =
-        convert_derivative_to_primitive(u, gradients[1], equations)
-    _, dv1dy, dv2dy, dv3dy, dTdy =
-        convert_derivative_to_primitive(u, gradients[2], equations)
-    _, dv1dz, dv2dz, dv3dz, dTdz =
-        convert_derivative_to_primitive(u, gradients[3], equations)
+    _, dv1dx, dv2dx, dv3dx, dTdx = convert_derivative_to_primitive(u, gradients[1],
+                                                                   equations)
+    _, dv1dy, dv2dy, dv3dy, dTdy = convert_derivative_to_primitive(u, gradients[2],
+                                                                   equations)
+    _, dv1dz, dv2dz, dv3dz, dTdz = convert_derivative_to_primitive(u, gradients[3],
+                                                                   equations)
 
     # Components of viscous stress tensor
 
@@ -230,7 +217,6 @@ function flux(
     end
 end
 
-
 # Convert conservative variables to primitive
 @inline function cons2prim(u, equations::CompressibleNavierStokesDiffusion3D)
     rho, rho_v1, rho_v2, rho_v3, _ = u
@@ -247,50 +233,49 @@ end
 # TODO: parabolic. We can improve efficiency by not computing w_1, which involves logarithms
 # This can be done by specializing `cons2entropy` and `entropy2cons` to `CompressibleNavierStokesDiffusion2D`,
 # but this may be confusing to new users.
-cons2entropy(u, equations::CompressibleNavierStokesDiffusion3D) =
+function cons2entropy(u, equations::CompressibleNavierStokesDiffusion3D)
     cons2entropy(u, equations.equations_hyperbolic)
-entropy2cons(w, equations::CompressibleNavierStokesDiffusion3D) =
+end
+function entropy2cons(w, equations::CompressibleNavierStokesDiffusion3D)
     entropy2cons(w, equations.equations_hyperbolic)
+end
 
 # the `flux` function takes in transformed variables `u` which depend on the type of the gradient variables.
 # For CNS, it is simplest to formulate the viscous terms in primitive variables, so we transform the transformed
 # variables into primitive variables.
-@inline function convert_transformed_to_primitive(
-    u_transformed,
-    equations::CompressibleNavierStokesDiffusion3D{GradientVariablesPrimitive},
-)
+@inline function convert_transformed_to_primitive(u_transformed,
+                                                  equations::CompressibleNavierStokesDiffusion3D{
+                                                                                                 GradientVariablesPrimitive
+                                                                                                 })
     return u_transformed
 end
 
 # TODO: parabolic. Make this more efficient!
-@inline function convert_transformed_to_primitive(
-    u_transformed,
-    equations::CompressibleNavierStokesDiffusion3D{GradientVariablesEntropy},
-)
+@inline function convert_transformed_to_primitive(u_transformed,
+                                                  equations::CompressibleNavierStokesDiffusion3D{
+                                                                                                 GradientVariablesEntropy
+                                                                                                 })
     # note: this uses CompressibleNavierStokesDiffusion3D versions of cons2prim and entropy2cons
     return cons2prim(entropy2cons(u_transformed, equations), equations)
 end
-
 
 # Takes the solution values `u` and gradient of the entropy variables (w_2, w_3, w_4, w_5) and
 # reverse engineers the gradients to be terms of the primitive variables (v1, v2, v3, T).
 # Helpful because then the diffusive fluxes have the same form as on paper.
 # Note, the first component of `gradient_entropy_vars` contains gradient(rho) which is unused.
 # TODO: parabolic; entropy stable viscous terms
-@inline function convert_derivative_to_primitive(
-    u,
-    gradient,
-    ::CompressibleNavierStokesDiffusion3D{GradientVariablesPrimitive},
-)
+@inline function convert_derivative_to_primitive(u, gradient,
+                                                 ::CompressibleNavierStokesDiffusion3D{
+                                                                                       GradientVariablesPrimitive
+                                                                                       })
     return gradient
 end
 
 # the first argument is always the "transformed" variables.
-@inline function convert_derivative_to_primitive(
-    w,
-    gradient_entropy_vars,
-    equations::CompressibleNavierStokesDiffusion3D{GradientVariablesEntropy},
-)
+@inline function convert_derivative_to_primitive(w, gradient_entropy_vars,
+                                                 equations::CompressibleNavierStokesDiffusion3D{
+                                                                                                GradientVariablesEntropy
+                                                                                                })
 
     # TODO: parabolic. This is inefficient to pass in transformed variables but then transform them back.
     # We can fix this if we directly compute v1, v2, v3, T from the entropy variables
@@ -302,23 +287,20 @@ end
     v3 = rho_v3 / rho
     T = temperature(u, equations)
 
-    return SVector(
-        gradient_entropy_vars[1],
-        T * (gradient_entropy_vars[2] + v1 * gradient_entropy_vars[5]), # grad(u) = T*(grad(w_2)+v1*grad(w_5))
-        T * (gradient_entropy_vars[3] + v2 * gradient_entropy_vars[5]), # grad(v) = T*(grad(w_3)+v2*grad(w_5))
-        T * (gradient_entropy_vars[4] + v3 * gradient_entropy_vars[5]), # grad(v) = T*(grad(w_4)+v3*grad(w_5))
-        T * T * gradient_entropy_vars[5],                                # grad(T) = T^2*grad(w_5))
-    )
+    return SVector(gradient_entropy_vars[1],
+                   T * (gradient_entropy_vars[2] + v1 * gradient_entropy_vars[5]), # grad(u) = T*(grad(w_2)+v1*grad(w_5))
+                   T * (gradient_entropy_vars[3] + v2 * gradient_entropy_vars[5]), # grad(v) = T*(grad(w_3)+v2*grad(w_5))
+                   T * (gradient_entropy_vars[4] + v3 * gradient_entropy_vars[5]), # grad(v) = T*(grad(w_4)+v3*grad(w_5))
+                   T * T * gradient_entropy_vars[5])
 end
-
 
 # This routine is required because `prim2cons` is called in `initial_condition`, which
 # is called with `equations::CompressibleEulerEquations3D`. This means it is inconsistent
 # with `cons2prim(..., ::CompressibleNavierStokesDiffusion3D)` as defined above.
 # TODO: parabolic. Is there a way to clean this up?
-@inline prim2cons(u, equations::CompressibleNavierStokesDiffusion3D) =
+@inline function prim2cons(u, equations::CompressibleNavierStokesDiffusion3D)
     prim2cons(u, equations.equations_hyperbolic)
-
+end
 
 @inline function temperature(u, equations::CompressibleNavierStokesDiffusion3D)
     rho, rho_v1, rho_v2, rho_v3, rho_e = u
@@ -328,14 +310,12 @@ end
     return T
 end
 
-
 @inline function enstrophy(u, gradients, equations::CompressibleNavierStokesDiffusion3D)
     # Enstrophy is 0.5 rho ω⋅ω where ω = ∇ × v
 
     omega = vorticity(u, gradients, equations)
     return 0.5 * u[1] * (omega[1]^2 + omega[2]^2 + omega[3]^2)
 end
-
 
 @inline function vorticity(u, gradients, equations::CompressibleNavierStokesDiffusion3D)
     # Ensure that we have velocity `gradients` by way of the `convert_gradient_variables` function.
@@ -346,96 +326,69 @@ end
     return SVector(dv3dy - dv2dz, dv1dz - dv3dx, dv2dx - dv1dy)
 end
 
-
-@inline function (
-    boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,<:Adiabatic}
-)(
-    flux_inner,
-    u_inner,
-    normal::AbstractVector,
-    x,
-    t,
-    operator_type::Gradient,
-    equations::CompressibleNavierStokesDiffusion3D{GradientVariablesPrimitive},
-)
-    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(
-        x,
-        t,
-        equations,
-    )
+@inline function (boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,
+                                                                        <:Adiabatic})(flux_inner,
+                                                                                      u_inner,
+                                                                                      normal::AbstractVector,
+                                                                                      x, t,
+                                                                                      operator_type::Gradient,
+                                                                                      equations::CompressibleNavierStokesDiffusion3D{
+                                                                                                                                     GradientVariablesPrimitive
+                                                                                                                                     })
+    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(x,
+                                                                                        t,
+                                                                                        equations)
     return SVector(u_inner[1], v1, v2, v3, u_inner[5])
 end
 
-@inline function (
-    boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,<:Adiabatic}
-)(
-    flux_inner,
-    u_inner,
-    normal::AbstractVector,
-    x,
-    t,
-    operator_type::Divergence,
-    equations::CompressibleNavierStokesDiffusion3D{GradientVariablesPrimitive},
-)
+@inline function (boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,
+                                                                        <:Adiabatic})(flux_inner,
+                                                                                      u_inner,
+                                                                                      normal::AbstractVector,
+                                                                                      x, t,
+                                                                                      operator_type::Divergence,
+                                                                                      equations::CompressibleNavierStokesDiffusion3D{
+                                                                                                                                     GradientVariablesPrimitive
+                                                                                                                                     })
     # rho, v1, v2, v3, _ = u_inner
-    normal_heat_flux =
-        boundary_condition.boundary_condition_heat_flux.boundary_value_normal_flux_function(
-            x,
-            t,
-            equations,
-        )
-    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(
-        x,
-        t,
-        equations,
-    )
+    normal_heat_flux = boundary_condition.boundary_condition_heat_flux.boundary_value_normal_flux_function(x,
+                                                                                                           t,
+                                                                                                           equations)
+    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(x,
+                                                                                        t,
+                                                                                        equations)
     _, tau_1n, tau_2n, tau_3n, _ = flux_inner # extract fluxes for 2nd, 3rd, and 4th equations
     normal_energy_flux = v1 * tau_1n + v2 * tau_2n + v3 * tau_3n + normal_heat_flux
-    return SVector(
-        flux_inner[1],
-        flux_inner[2],
-        flux_inner[3],
-        flux_inner[4],
-        normal_energy_flux,
-    )
+    return SVector(flux_inner[1], flux_inner[2], flux_inner[3], flux_inner[4],
+                   normal_energy_flux)
 end
 
-
-@inline function (
-    boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,<:Isothermal}
-)(
-    flux_inner,
-    u_inner,
-    normal::AbstractVector,
-    x,
-    t,
-    operator_type::Gradient,
-    equations::CompressibleNavierStokesDiffusion3D{GradientVariablesPrimitive},
-)
-    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(
-        x,
-        t,
-        equations,
-    )
-    T = boundary_condition.boundary_condition_heat_flux.boundary_value_function(
-        x,
-        t,
-        equations,
-    )
+@inline function (boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,
+                                                                        <:Isothermal})(flux_inner,
+                                                                                       u_inner,
+                                                                                       normal::AbstractVector,
+                                                                                       x, t,
+                                                                                       operator_type::Gradient,
+                                                                                       equations::CompressibleNavierStokesDiffusion3D{
+                                                                                                                                      GradientVariablesPrimitive
+                                                                                                                                      })
+    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(x,
+                                                                                        t,
+                                                                                        equations)
+    T = boundary_condition.boundary_condition_heat_flux.boundary_value_function(x, t,
+                                                                                equations)
     return SVector(u_inner[1], v1, v2, v3, T)
 end
 
-@inline function (
-    boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,<:Isothermal}
-)(
-    flux_inner,
-    u_inner,
-    normal::AbstractVector,
-    x,
-    t,
-    operator_type::Divergence,
-    equations::CompressibleNavierStokesDiffusion3D{GradientVariablesPrimitive},
-)
+@inline function (boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,
+                                                                        <:Isothermal})(flux_inner,
+                                                                                       u_inner,
+                                                                                       normal::AbstractVector,
+                                                                                       x, t,
+                                                                                       operator_type::Divergence,
+                                                                                       equations::CompressibleNavierStokesDiffusion3D{
+                                                                                                                                      GradientVariablesPrimitive
+                                                                                                                                      })
     return flux_inner
 end
 
@@ -447,109 +400,74 @@ end
 # Taken from "Entropy stable modal discontinuous Galerkin schemes and wall boundary conditions
 #             for the compressible Navier-Stokes equations" by Chan, Lin, Warburton 2022.
 # DOI: 10.1016/j.jcp.2021.110723
-@inline function (
-    boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,<:Adiabatic}
-)(
-    flux_inner,
-    w_inner,
-    normal::AbstractVector,
-    x,
-    t,
-    operator_type::Gradient,
-    equations::CompressibleNavierStokesDiffusion3D{GradientVariablesEntropy},
-)
-    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(
-        x,
-        t,
-        equations,
-    )
+@inline function (boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,
+                                                                        <:Adiabatic})(flux_inner,
+                                                                                      w_inner,
+                                                                                      normal::AbstractVector,
+                                                                                      x, t,
+                                                                                      operator_type::Gradient,
+                                                                                      equations::CompressibleNavierStokesDiffusion3D{
+                                                                                                                                     GradientVariablesEntropy
+                                                                                                                                     })
+    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(x,
+                                                                                        t,
+                                                                                        equations)
     negative_rho_inv_p = w_inner[5] # w_5 = -rho / p
-    return SVector(
-        w_inner[1],
-        -v1 * negative_rho_inv_p,
-        -v2 * negative_rho_inv_p,
-        -v3 * negative_rho_inv_p,
-        negative_rho_inv_p,
-    )
+    return SVector(w_inner[1], -v1 * negative_rho_inv_p, -v2 * negative_rho_inv_p,
+                   -v3 * negative_rho_inv_p, negative_rho_inv_p)
 end
 
 # this is actually identical to the specialization for GradientVariablesPrimitive, but included for completeness.
-@inline function (
-    boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,<:Adiabatic}
-)(
-    flux_inner,
-    w_inner,
-    normal::AbstractVector,
-    x,
-    t,
-    operator_type::Divergence,
-    equations::CompressibleNavierStokesDiffusion3D{GradientVariablesEntropy},
-)
-    normal_heat_flux =
-        boundary_condition.boundary_condition_heat_flux.boundary_value_normal_flux_function(
-            x,
-            t,
-            equations,
-        )
-    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(
-        x,
-        t,
-        equations,
-    )
+@inline function (boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,
+                                                                        <:Adiabatic})(flux_inner,
+                                                                                      w_inner,
+                                                                                      normal::AbstractVector,
+                                                                                      x, t,
+                                                                                      operator_type::Divergence,
+                                                                                      equations::CompressibleNavierStokesDiffusion3D{
+                                                                                                                                     GradientVariablesEntropy
+                                                                                                                                     })
+    normal_heat_flux = boundary_condition.boundary_condition_heat_flux.boundary_value_normal_flux_function(x,
+                                                                                                           t,
+                                                                                                           equations)
+    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(x,
+                                                                                        t,
+                                                                                        equations)
     _, tau_1n, tau_2n, tau_3n, _ = flux_inner # extract fluxes for 2nd, 3rd, and 4th equations
     normal_energy_flux = v1 * tau_1n + v2 * tau_2n + v3 * tau_3n + normal_heat_flux
-    return SVector(
-        flux_inner[1],
-        flux_inner[2],
-        flux_inner[3],
-        flux_inner[4],
-        normal_energy_flux,
-    )
+    return SVector(flux_inner[1], flux_inner[2], flux_inner[3], flux_inner[4],
+                   normal_energy_flux)
 end
 
-@inline function (
-    boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,<:Isothermal}
-)(
-    flux_inner,
-    w_inner,
-    normal::AbstractVector,
-    x,
-    t,
-    operator_type::Gradient,
-    equations::CompressibleNavierStokesDiffusion3D{GradientVariablesEntropy},
-)
-    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(
-        x,
-        t,
-        equations,
-    )
-    T = boundary_condition.boundary_condition_heat_flux.boundary_value_function(
-        x,
-        t,
-        equations,
-    )
+@inline function (boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,
+                                                                        <:Isothermal})(flux_inner,
+                                                                                       w_inner,
+                                                                                       normal::AbstractVector,
+                                                                                       x, t,
+                                                                                       operator_type::Gradient,
+                                                                                       equations::CompressibleNavierStokesDiffusion3D{
+                                                                                                                                      GradientVariablesEntropy
+                                                                                                                                      })
+    v1, v2, v3 = boundary_condition.boundary_condition_velocity.boundary_value_function(x,
+                                                                                        t,
+                                                                                        equations)
+    T = boundary_condition.boundary_condition_heat_flux.boundary_value_function(x, t,
+                                                                                equations)
 
     # the entropy variables w2 = rho * v1 / p = v1 / T = -v1 * w5. Similarly for w3 and w4
     w5 = -1 / T
     return SVector(w_inner[1], -v1 * w5, -v2 * w5, -v3 * w5, w5)
 end
 
-@inline function (
-    boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,<:Isothermal}
-)(
-    flux_inner,
-    w_inner,
-    normal::AbstractVector,
-    x,
-    t,
-    operator_type::Divergence,
-    equations::CompressibleNavierStokesDiffusion3D{GradientVariablesEntropy},
-)
-    return SVector(
-        flux_inner[1],
-        flux_inner[2],
-        flux_inner[3],
-        flux_inner[4],
-        flux_inner[5],
-    )
+@inline function (boundary_condition::BoundaryConditionNavierStokesWall{<:NoSlip,
+                                                                        <:Isothermal})(flux_inner,
+                                                                                       w_inner,
+                                                                                       normal::AbstractVector,
+                                                                                       x, t,
+                                                                                       operator_type::Divergence,
+                                                                                       equations::CompressibleNavierStokesDiffusion3D{
+                                                                                                                                      GradientVariablesEntropy
+                                                                                                                                      })
+    return SVector(flux_inner[1], flux_inner[2], flux_inner[3], flux_inner[4],
+                   flux_inner[5])
 end

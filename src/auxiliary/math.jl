@@ -3,7 +3,7 @@
 # we need to opt-in explicitly.
 # See https://ranocha.de/blog/Optimizing_EC_Trixi for further details.
 @muladd begin
-
+#! format: noindent
 
     """
         ln_mean(x, y)
@@ -63,115 +63,118 @@
         end
     end
 
-    """
-        inv_ln_mean(x, y)
-    
-    Compute the inverse `1 / ln_mean(x, y)` of the logarithmic mean
-    [`ln_mean`](@ref).
-    
-    This function may be used to increase performance where the inverse of the
-    logarithmic mean is needed, by replacing a (slow) division by a (fast)
-    multiplication.
-    """
-    @inline function inv_ln_mean(x, y)
-        epsilon_f2 = 1.0e-4
-        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y) # f2 = f^2
-        if f2 < epsilon_f2
-            return @evalpoly(f2, 2, 2 / 3, 2 / 5, 2 / 7) / (x + y)
-        else
-            return log(y / x) / (y - x)
-        end
+# References
+- Ismail, Roe (2009).
+  Affordable, entropy-consistent Euler flux functions II: Entropy production at shocks.
+  [DOI: 10.1016/j.jcp.2009.04.021](https://doi.org/10.1016/j.jcp.2009.04.021)
+- Agner Fog.
+  Lists of instruction latencies, throughputs and micro-operation breakdowns
+  for Intel, AMD, and VIA CPUs.
+  https://www.agner.org/optimize/instruction_tables.pdf
+"""
+@inline function ln_mean(x, y)
+    epsilon_f2 = 1.0e-4
+    f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y) # f2 = f^2
+    if f2 < epsilon_f2
+        return (x + y) / @evalpoly(f2, 2, 2/3, 2/5, 2/7)
+    else
+        return (y - x) / log(y / x)
     end
+end
 
+"""
+    inv_ln_mean(x, y)
 
+Compute the inverse `1 / ln_mean(x, y)` of the logarithmic mean
+[`ln_mean`](@ref).
 
-    # `Base.max` and `Base.min` perform additional checks for signed zeros and `NaN`s
-    # which are not present in comparable functions in Fortran/C++. For example,
-    # ```julia
-    # julia> @code_native debuginfo=:none syntax=:intel max(1.0, 2.0)
-    #         .text
-    #         vmovq   rcx, xmm1
-    #         vmovq   rax, xmm0
-    #         vcmpordsd       xmm2, xmm0, xmm0
-    #         vblendvpd       xmm2, xmm0, xmm1, xmm2
-    #         vcmpordsd       xmm3, xmm1, xmm1
-    #         vblendvpd       xmm3, xmm1, xmm0, xmm3
-    #         vmovapd xmm4, xmm2
-    #         test    rcx, rcx
-    #         jns     L45
-    #         vmovapd xmm4, xmm3
-    # L45:
-    #         test    rax, rax
-    #         js      L54
-    #         vmovapd xmm4, xmm3
-    # L54:
-    #         vcmpltsd        xmm0, xmm0, xmm1
-    #         vblendvpd       xmm0, xmm4, xmm2, xmm0
-    #         ret
-    #         nop     word ptr cs:[rax + rax]
-    #
-    # julia> @code_native debuginfo=:none syntax=:intel min(1.0, 2.0)
-    #         .text
-    #         vmovq   rcx, xmm1
-    #         vmovq   rax, xmm0
-    #         vcmpordsd       xmm2, xmm0, xmm0
-    #         vblendvpd       xmm2, xmm0, xmm1, xmm2
-    #         vcmpordsd       xmm3, xmm1, xmm1
-    #         vblendvpd       xmm3, xmm1, xmm0, xmm3
-    #         vmovapd xmm4, xmm2
-    #         test    rcx, rcx
-    #         jns     L58
-    #         test    rax, rax
-    #         js      L67
-    # L46:
-    #         vcmpltsd        xmm0, xmm1, xmm0
-    #         vblendvpd       xmm0, xmm4, xmm2, xmm0
-    #         ret
-    # L58:
-    #         vmovapd xmm4, xmm3
-    #         test    rax, rax
-    #         jns     L46
-    # L67:
-    #         vmovapd xmm4, xmm3
-    #         vcmpltsd        xmm0, xmm1, xmm0
-    #         vblendvpd       xmm0, xmm4, xmm2, xmm0
-    #         ret
-    #         nop     word ptr cs:[rax + rax]
-    #         nop     dword ptr [rax]
-    # ```
-    # In contrast, we get the much simpler and faster version
-    # ```julia
-    # julia> @code_native debuginfo=:none syntax=:intel Base.FastMath.max_fast(1.0, 2.0)
-    #         .text
-    #         vmaxsd  xmm0, xmm1, xmm0
-    #         ret
-    #         nop     word ptr cs:[rax + rax]
-    #
-    # julia> @code_native debuginfo=:none syntax=:intel Base.FastMath.min_fast(1.0, 2.0)
-    #         .text
-    #         vminsd  xmm0, xmm0, xmm1
-    #         ret
-    #         nop     word ptr cs:[rax + rax]
-    # ```
-    # when using `@fastmath`, which we also get from
-    # [Fortran](https://godbolt.org/z/Yrsa1js7P)
-    # or [C++](https://godbolt.org/z/674G7Pccv).
-    """
-        max(x, y, ...)
-    
-    Return the maximum of the arguments. See also the `maximum` function to take
-    the maximum element from a collection.
-    
-    This version in Trixi.jl is semantically equivalent to `Base.max` but may
-    be implemented differently. In particular, it may avoid potentially expensive
-    checks necessary in the presence of `NaN`s (or signed zeros).
-    
-    # Examples
-    
-    julia> max(2, 5, 1)
-    5
-    """
-    @inline max(args...) = @fastmath max(args...)
+This function may be used to increase performance where the inverse of the
+logarithmic mean is needed, by replacing a (slow) division by a (fast)
+multiplication.
+"""
+@inline function inv_ln_mean(x, y)
+    epsilon_f2 = 1.0e-4
+    f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y) # f2 = f^2
+    if f2 < epsilon_f2
+        return @evalpoly(f2, 2, 2/3, 2/5, 2/7) / (x + y)
+    else
+        return log(y / x) / (y - x)
+    end
+end
+
+# `Base.max` and `Base.min` perform additional checks for signed zeros and `NaN`s
+# which are not present in comparable functions in Fortran/C++. For example,
+# ```julia
+# julia> @code_native debuginfo=:none syntax=:intel max(1.0, 2.0)
+#         .text
+#         vmovq   rcx, xmm1
+#         vmovq   rax, xmm0
+#         vcmpordsd       xmm2, xmm0, xmm0
+#         vblendvpd       xmm2, xmm0, xmm1, xmm2
+#         vcmpordsd       xmm3, xmm1, xmm1
+#         vblendvpd       xmm3, xmm1, xmm0, xmm3
+#         vmovapd xmm4, xmm2
+#         test    rcx, rcx
+#         jns     L45
+#         vmovapd xmm4, xmm3
+# L45:
+#         test    rax, rax
+#         js      L54
+#         vmovapd xmm4, xmm3
+# L54:
+#         vcmpltsd        xmm0, xmm0, xmm1
+#         vblendvpd       xmm0, xmm4, xmm2, xmm0
+#         ret
+#         nop     word ptr cs:[rax + rax]
+#
+# julia> @code_native debuginfo=:none syntax=:intel min(1.0, 2.0)
+#         .text
+#         vmovq   rcx, xmm1
+#         vmovq   rax, xmm0
+#         vcmpordsd       xmm2, xmm0, xmm0
+#         vblendvpd       xmm2, xmm0, xmm1, xmm2
+#         vcmpordsd       xmm3, xmm1, xmm1
+#         vblendvpd       xmm3, xmm1, xmm0, xmm3
+#         vmovapd xmm4, xmm2
+#         test    rcx, rcx
+#         jns     L58
+#         test    rax, rax
+#         js      L67
+# L46:
+#         vcmpltsd        xmm0, xmm1, xmm0
+#         vblendvpd       xmm0, xmm4, xmm2, xmm0
+#         ret
+# L58:
+#         vmovapd xmm4, xmm3
+#         test    rax, rax
+#         jns     L46
+# L67:
+#         vmovapd xmm4, xmm3
+#         vcmpltsd        xmm0, xmm1, xmm0
+#         vblendvpd       xmm0, xmm4, xmm2, xmm0
+#         ret
+#         nop     word ptr cs:[rax + rax]
+#         nop     dword ptr [rax]
+# ```
+# In contrast, we get the much simpler and faster version
+# ```julia
+# julia> @code_native debuginfo=:none syntax=:intel Base.FastMath.max_fast(1.0, 2.0)
+#         .text
+#         vmaxsd  xmm0, xmm1, xmm0
+#         ret
+#         nop     word ptr cs:[rax + rax]
+#
+# julia> @code_native debuginfo=:none syntax=:intel Base.FastMath.min_fast(1.0, 2.0)
+#         .text
+#         vminsd  xmm0, xmm0, xmm1
+#         ret
+#         nop     word ptr cs:[rax + rax]
+# ```
+# when using `@fastmath`, which we also get from
+# [Fortran](https://godbolt.org/z/Yrsa1js7P)
+# or [C++](https://godbolt.org/z/674G7Pccv).
+"""
+    max(x, y, ...)
 
     """
         min(x, y, ...)
@@ -190,27 +193,23 @@
     """
     @inline min(args...) = @fastmath min(args...)
 
+"""
+    positive_part(x)
 
+Return `x` if `x` is positive, else zero. In other words, return
+`(x + abs(x)) / 2` for real numbers `x`.
+"""
+@inline function positive_part(x)
+    return max(x, zero(x))
+end
 
-    """
-        positive_part(x)
-    
-    Return `x` if `x` is positive, else zero. In other words, return
-    `(x + abs(x)) / 2` for real numbers `x`.
-    """
-    @inline function positive_part(x)
-        return max(x, zero(x))
-    end
+"""
+    negative_part(x)
 
-    """
-        negative_part(x)
-    
-    Return `x` if `x` is negative, else zero. In other words, return
-    `(x - abs(x)) / 2` for real numbers `x`.
-    """
-    @inline function negative_part(x)
-        return min(x, zero(x))
-    end
-
-
+Return `x` if `x` is negative, else zero. In other words, return
+`(x - abs(x)) / 2` for real numbers `x`.
+"""
+@inline function negative_part(x)
+    return min(x, zero(x))
+end
 end # @muladd
