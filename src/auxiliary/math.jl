@@ -63,6 +63,7 @@
         end
     end
 
+"""
 # References
 - Ismail, Roe (2009).
   Affordable, entropy-consistent Euler flux functions II: Entropy production at shocks.
@@ -70,7 +71,7 @@
 - Agner Fog.
   Lists of instruction latencies, throughputs and micro-operation breakdowns
   for Intel, AMD, and VIA CPUs.
-  https://www.agner.org/optimize/instruction_tables.pdf
+  [https://www.agner.org/optimize/instruction_tables.pdf](https://www.agner.org/optimize/instruction_tables.pdf)
 """
 @inline function ln_mean(x, y)
     epsilon_f2 = 1.0e-4
@@ -176,22 +177,40 @@ end
 """
     max(x, y, ...)
 
-    """
-        min(x, y, ...)
-    
-    Return the minimum of the arguments. See also the `minimum` function to take
-    the minimum element from a collection.
-    
-    This version in Trixi.jl is semantically equivalent to `Base.min` but may
-    be implemented differently. In particular, it may avoid potentially expensive
-    checks necessary in the presence of `NaN`s (or signed zeros).
-    
-    # Examples
-    
-    julia> min(2, 5, 1)
-    1
-    """
-    @inline min(args...) = @fastmath min(args...)
+Return the maximum of the arguments. See also the `maximum` function to take
+the maximum element from a collection.
+
+This version in Trixi.jl is semantically equivalent to `Base.max` but may
+be implemented differently. In particular, it may avoid potentially expensive
+checks necessary in the presence of `NaN`s (or signed zeros).
+
+# Examples
+
+```jldoctest
+julia> max(2, 5, 1)
+5
+```
+"""
+@inline max(args...) = @fastmath max(args...)
+
+"""
+    min(x, y, ...)
+
+Return the minimum of the arguments. See also the `minimum` function to take
+the minimum element from a collection.
+
+This version in Trixi.jl is semantically equivalent to `Base.min` but may
+be implemented differently. In particular, it may avoid potentially expensive
+checks necessary in the presence of `NaN`s (or signed zeros).
+
+# Examples
+
+```jldoctest
+julia> min(2, 5, 1)
+1
+```
+"""
+@inline min(args...) = @fastmath min(args...)
 
 """
     positive_part(x)
