@@ -645,11 +645,9 @@ include("passive_tracers.jl")
 # Retrieve number of components from equation instance for the multicomponent case
 @inline function ncomponents(::AbstractCompressibleEulerMulticomponentEquations{NDIMS,
                                                                                 NVARS,
-                                                                                NCOMP}) where {
-                                                                                               NDIMS,
+                                                                                NCOMP}) where {NDIMS,
                                                                                                NVARS,
-                                                                                               NCOMP
-                                                                                               }
+                                                                                               NCOMP}
     NCOMP
 end
 """
@@ -685,11 +683,9 @@ include("ideal_glm_mhd_multiion_3d.jl")
 
 # Retrieve number of components from equation instance for the multicomponent case
 @inline function ncomponents(::AbstractIdealGlmMhdMulticomponentEquations{NDIMS, NVARS,
-                                                                          NCOMP}) where {
-                                                                                         NDIMS,
+                                                                          NCOMP}) where {NDIMS,
                                                                                          NVARS,
-                                                                                         NCOMP
-                                                                                         }
+                                                                                         NCOMP}
     NCOMP
 end
 """
@@ -705,11 +701,9 @@ end
 
 # Retrieve number of components from equation instance for the multi-ion case
 @inline function ncomponents(::AbstractIdealGlmMhdMultiIonEquations{NDIMS, NVARS,
-                                                                    NCOMP}) where {
-                                                                                   NDIMS,
+                                                                    NCOMP}) where {NDIMS,
                                                                                    NVARS,
-                                                                                   NCOMP
-                                                                                   }
+                                                                                   NCOMP}
     NCOMP
 end
 
@@ -760,6 +754,11 @@ include("traffic_flow_lwr_1d.jl")
 abstract type AbstractMaxwellEquations{NDIMS, NVARS} <:
               AbstractEquations{NDIMS, NVARS} end
 include("maxwell_1d.jl")
+include("maxwell_2d.jl")
+
+abstract type AbstractGLMMaxwellEquations{NDIMS, NVARS} <:
+              AbstractEquations{NDIMS, NVARS} end
+include("glm_maxwell_2d.jl")
 
 abstract type AbstractLinearElasticityEquations{NDIMS, NVARS} <:
               AbstractEquations{NDIMS, NVARS} end

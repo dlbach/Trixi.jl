@@ -178,7 +178,8 @@ export AcousticPerturbationEquations2D,
        LinearizedEulerEquations1D, LinearizedEulerEquations2D, LinearizedEulerEquations3D,
        PolytropicEulerEquations2D,
        TrafficFlowLWREquations1D,
-       MaxwellEquations1D,
+       MaxwellEquations1D, MaxwellEquations2D,
+       GLMMaxwellEquations2D,
        LinearElasticityEquations1D,
        PassiveTracerEquations
 
