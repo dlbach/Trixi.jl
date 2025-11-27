@@ -7,7 +7,7 @@
 struct MaxwellEquations2D{RealT <: Real} <: AbstractMaxwellEquations{2, 3}
     speed_of_light::RealT # c
 
-    function MaxwellEquations1D(c::Real = 299_792_458.0)
+    function MaxwellEquations2D(c::Real = 299_792_458.0)
         new{typeof(c)}(c)
     end
 end
@@ -220,10 +220,9 @@ function min_max_speed_naive(u_ll, u_rr, orientation, ::MaxwellEquations2D)
     (-equations.speed_of_light, equations.speed_of_light)
 end
 
-max_abs_speeds(u,
-               ::MaxwellEquations2D) = (equations.speed_of_light,
+max_abs_speeds(u, equations::MaxwellEquations2D) = (equations.speed_of_light,
                                         equations.speed_of_light)
 
-max_abs_speed_naive(u_ll, u_rr, orientation,
-                    ::MaxwellEquations2D) = equations.speed_of_light
+max_abs_speed_naive(u_ll, u_rr, orientation, 
+                    equations::MaxwellEquations2D) = equations.speed_of_light
 end # @muladd

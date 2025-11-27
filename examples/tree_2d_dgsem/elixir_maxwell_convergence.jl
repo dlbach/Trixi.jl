@@ -1,5 +1,4 @@
-
-using OrdinaryDiffEq
+using OrdinaryDiffEqLowStorageRK
 using Trixi
 
 ###############################################################################
@@ -20,7 +19,7 @@ analysis_callback = AnalysisCallback(semi, interval = analysis_interval,
                                      save_analysis = true)
 
 cfl = 1.0
-tspan = (0.0, 1e-8)
+tspan = (0.0, 1e-7)
 
 ode = semidiscretize(semi, tspan)
 summary_callback = SummaryCallback()
