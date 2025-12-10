@@ -673,8 +673,17 @@ pretty_form_ascii(::typeof(enstrophy)) = "enstrophy"
 pretty_form_utf(::Val{:l2_divb}) = "L2 ∇⋅B"
 pretty_form_ascii(::Val{:l2_divb}) = "l2_divb"
 
+pretty_form_utf(::Val{:l2_b_normal_jump}) = "L2 B⋅n jump"
+pretty_form_ascii(::Val{:l2_b_normal_jump}) = "l2_B_normal jump"
+
 pretty_form_utf(::Val{:linf_divb}) = "L∞ ∇⋅B"
 pretty_form_ascii(::Val{:linf_divb}) = "linf_divb"
+
+pretty_form_utf(::Val{:l2_dive}) = "L2 ∇⋅E volume"
+pretty_form_ascii(::Val{:l2_dive}) = "l2_dive volume"
+
+pretty_form_utf(::Val{:l2_e_normal_jump}) = "L2 E⋅n jump"
+pretty_form_ascii(::Val{:l2_e_normal_jump}) = "l2_E_normal jump"
 
 pretty_form_utf(::typeof(lake_at_rest_error)) = "∑|H₀-(h+b)|"
 pretty_form_ascii(::typeof(lake_at_rest_error)) = "|H0-(h+b)|"

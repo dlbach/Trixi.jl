@@ -22,6 +22,8 @@ end
 varnames(::typeof(cons2cons), ::GLMMaxwellEquations2D) = ("E1", "E2", "B", "Psi")
 varnames(::typeof(cons2prim), ::GLMMaxwellEquations2D) = ("E1", "E2", "B", "Psi")
 
+electric_field(u, equations::GLMMaxwellEquations2D) = SVector(u[1], u[2])
+
 @inline function flux(u, orientation::Integer, equations::GLMMaxwellEquations2D)
     c_sqr = equations.speed_of_light^2
 

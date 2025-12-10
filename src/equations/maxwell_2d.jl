@@ -15,6 +15,8 @@ end
 varnames(::typeof(cons2cons), ::MaxwellEquations2D) = ("E1", "E2", "B")
 varnames(::typeof(cons2prim), ::MaxwellEquations2D) = ("E1", "E2", "B")
 
+electric_field(u, equations::GLMMaxwellEquations2D) = SVector(u[1], u[2])
+
 # Convert conservative variables to primitive
 @inline cons2prim(u, equation::MaxwellEquations2D) = u
 

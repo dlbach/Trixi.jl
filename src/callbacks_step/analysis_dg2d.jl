@@ -284,6 +284,116 @@ function analyze(::typeof(entropy_timederivative), du, u, t,
     end
 end
 
+function analyze(::Val{:l2_dive}, du, u, t,
+                 mesh::TreeMesh{2},
+                 equations, dg::DGSEM, cache)
+    integrate_via_indices(u, mesh, equations, dg, cache, cache,
+                          dg.basis.derivative_matrix) do u, i, j, element, equations,
+                                                         dg, cache, derivative_matrix
+        dive = zero(eltype(u))
+        for k in eachnode(dg)
+            u_kj = get_node_vars(u, equations, dg, k, j, element)
+            u_ik = get_node_vars(u, equations, dg, i, k, element)
+
+            E1_kj, _, _ = electric_field(u_kj, equations)
+            _, E2_ik, _ = electric_field(u_ik, equations)
+
+            dive += (derivative_matrix[i, k] * E1_kj +
+                     derivative_matrix[j, k] * E2_ik)
+        end
+        dive *= cache.elements.inverse_jacobian[element]
+        dive^2
+    end |> sqrt
+end
+
+function analyze(::Val{:l2_dive}, du, u, t,
+                 mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2},
+                             T8codeMesh{2}},
+                 equations, dg::DGSEM, cache)
+    @unpack contravariant_vectors = cache.elements
+    integrate_via_indices(u, mesh, equations, dg, cache, cache,
+                          dg.basis.derivative_matrix) do u, i, j, element, equations,
+                                                         dg, cache, derivative_matrix
+        dive = zero(eltype(u))
+        # Get the contravariant vectors Ja^1 and Ja^2
+        Ja11, Ja12 = get_contravariant_vector(1, contravariant_vectors, i, j, element)
+        Ja21, Ja22 = get_contravariant_vector(2, contravariant_vectors, i, j, element)
+        # Compute the transformed divergence
+        for k in eachnode(dg)
+            u_kj = get_node_vars(u, equations, dg, k, j, element)
+            u_ik = get_node_vars(u, equations, dg, i, k, element)
+
+            E1_kj, E2_kj, _ = magnetic_field(u_kj, equations)
+            E1_ik, E2_ik, _ = magnetic_field(u_ik, equations)
+
+            dive += (derivative_matrix[i, k] *
+                     (Ja11 * E1_kj + Ja12 * E2_kj) +
+                     derivative_matrix[j, k] *
+                     (Ja21 * E1_ik + Ja22 * E2_ik))
+        end
+        dive *= cache.elements.inverse_jacobian[i, j, element]
+        dive^2
+    end |> sqrt
+end
+
+function analyze(::Val{:l2_e_normal_jump}, du, u, t,
+                 mesh::TreeMesh{2},
+                 equations, dg::DGSEM, cache)
+    integrate_via_indices(u, mesh, equations, dg, cache, cache,
+                          dg.basis.derivative_matrix) do u, i, j, element, equations,
+                                                         dg, cache, derivative_matrix
+        dive = zero(eltype(u))
+        for k in eachnode(dg)
+            u_kj = get_node_vars(u, equations, dg, k, j, element)
+            u_ik = get_node_vars(u, equations, dg, i, k, element)
+
+            E1_kj, _, _ = electric_field(u_kj, equations)
+            _, E2_ik, _ = electric_field(u_ik, equations)
+
+            dive += (derivative_matrix[i, k] * E1_kj +
+                     derivative_matrix[j, k] * E2_ik)
+        end
+        dive *= cache.elements.inverse_jacobian[element]
+        dive^2
+    end |> sqrt
+end
+
+#=
+function calc_interface_flux!(surface_flux_values,
+                              mesh::TreeMesh{2},
+                              have_nonconservative_terms::False, equations,
+                              surface_integral, dg::DG, cache)
+    @unpack surface_flux = surface_integral
+    @unpack u, neighbor_ids, orientations = cache.interfaces
+
+    @threaded for interface in eachinterface(dg, cache)
+        # Get neighboring elements
+        left_id = neighbor_ids[1, interface]
+        right_id = neighbor_ids[2, interface]
+
+        # Determine interface direction with respect to elements:
+        # orientation = 1: left -> 2, right -> 1
+        # orientation = 2: left -> 4, right -> 3
+        left_direction = 2 * orientations[interface]
+        right_direction = 2 * orientations[interface] - 1
+
+        for i in eachnode(dg)
+            # Call pointwise Riemann solver
+            u_ll, u_rr = get_surface_node_vars(u, equations, dg, i, interface)
+            flux = surface_flux(u_ll, u_rr, orientations[interface], equations)
+
+            # Copy flux to left and right element storage
+            for v in eachvariable(equations)
+                surface_flux_values[v, i, left_direction, left_id] = flux[v]
+                surface_flux_values[v, i, right_direction, right_id] = flux[v]
+            end
+        end
+    end
+
+    return nothing
+end
+=#
+
 function analyze(::Val{:l2_divb}, du, u, t,
                  mesh::TreeMesh{2},
                  equations, dg::DGSEM, cache)
