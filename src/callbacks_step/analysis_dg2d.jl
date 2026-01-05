@@ -323,8 +323,8 @@ function analyze(::Val{:l2_dive}, du, u, t,
             u_kj = get_node_vars(u, equations, dg, k, j, element)
             u_ik = get_node_vars(u, equations, dg, i, k, element)
 
-            E1_kj, E2_kj, _ = magnetic_field(u_kj, equations)
-            E1_ik, E2_ik, _ = magnetic_field(u_ik, equations)
+            E1_kj, E2_kj, _ = electric_field(u_kj, equations)
+            E1_ik, E2_ik, _ = electric_field(u_ik, equations)
 
             dive += (derivative_matrix[i, k] *
                      (Ja11 * E1_kj + Ja12 * E2_kj) +
@@ -336,63 +336,32 @@ function analyze(::Val{:l2_dive}, du, u, t,
     end |> sqrt
 end
 
+
 function analyze(::Val{:l2_e_normal_jump}, du, u, t,
                  mesh::TreeMesh{2},
                  equations, dg::DGSEM, cache)
-    integrate_via_indices(u, mesh, equations, dg, cache, cache,
+    integrate_surface_via_indices(u, mesh, equations, dg, cache, cache,
                           dg.basis.derivative_matrix) do u, i, j, element, equations,
-                                                         dg, cache, derivative_matrix
-        dive = zero(eltype(u))
-        for k in eachnode(dg)
-            u_kj = get_node_vars(u, equations, dg, k, j, element)
-            u_ik = get_node_vars(u, equations, dg, i, k, element)
-
-            E1_kj, _, _ = electric_field(u_kj, equations)
-            _, E2_ik, _ = electric_field(u_ik, equations)
-
-            dive += (derivative_matrix[i, k] * E1_kj +
-                     derivative_matrix[j, k] * E2_ik)
+                                                         dg, cache, derivative_matrix                                                        
+        @unpack u, neighbor_ids, orientations = cache.interfaces
+        normal_jump = zero(eltype(u))
+        if orientations[interface] == 1
+            for i in eachnode(dg)
+                # Call pointwise Riemann solver
+                u_ll, u_rr = get_surface_node_vars(u, equations, dg, i, interface)
+                normal_jump += u_ll[1] - u_rr[1]
+            end
+        else
+            for i in eachnode(dg)
+                # Call pointwise Riemann solver
+                u_ll, u_rr = get_surface_node_vars(u, equations, dg, i, interface)
+                normal_jump += u_ll[2] - u_rr[2]
+            end
         end
-        dive *= cache.elements.inverse_jacobian[element]
-        dive^2
+        normal_jump^2
     end |> sqrt
 end
 
-#=
-function calc_interface_flux!(surface_flux_values,
-                              mesh::TreeMesh{2},
-                              have_nonconservative_terms::False, equations,
-                              surface_integral, dg::DG, cache)
-    @unpack surface_flux = surface_integral
-    @unpack u, neighbor_ids, orientations = cache.interfaces
-
-    @threaded for interface in eachinterface(dg, cache)
-        # Get neighboring elements
-        left_id = neighbor_ids[1, interface]
-        right_id = neighbor_ids[2, interface]
-
-        # Determine interface direction with respect to elements:
-        # orientation = 1: left -> 2, right -> 1
-        # orientation = 2: left -> 4, right -> 3
-        left_direction = 2 * orientations[interface]
-        right_direction = 2 * orientations[interface] - 1
-
-        for i in eachnode(dg)
-            # Call pointwise Riemann solver
-            u_ll, u_rr = get_surface_node_vars(u, equations, dg, i, interface)
-            flux = surface_flux(u_ll, u_rr, orientations[interface], equations)
-
-            # Copy flux to left and right element storage
-            for v in eachvariable(equations)
-                surface_flux_values[v, i, left_direction, left_id] = flux[v]
-                surface_flux_values[v, i, right_direction, right_id] = flux[v]
-            end
-        end
-    end
-
-    return nothing
-end
-=#
 
 function analyze(::Val{:l2_divb}, du, u, t,
                  mesh::TreeMesh{2},

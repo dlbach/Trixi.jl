@@ -23,6 +23,10 @@ electric_field(u, equations::GLMMaxwellEquations2D) = SVector(u[1], u[2])
 # Convert conservative variables to entropy variables
 @inline cons2entropy(u, equation::MaxwellEquations2D) = u
 
+function default_analysis_integrals(::IdealGlmMhdEquations2D)
+    (Val(:l2_dive), Val(:l2_e_normal_jump))
+end
+
 @inline function flux(u, orientation::Integer, equations::MaxwellEquations2D)
     c_sqr = equations.speed_of_light^2
     if orientation == 1
