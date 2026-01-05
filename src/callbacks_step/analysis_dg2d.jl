@@ -295,11 +295,12 @@ function analyze(::Val{:l2_dive}, du, u, t,
             u_kj = get_node_vars(u, equations, dg, k, j, element)
             u_ik = get_node_vars(u, equations, dg, i, k, element)
 
-            E1_kj, _, _ = electric_field(u_kj, equations)
-            _, E2_ik, _ = electric_field(u_ik, equations)
+            E1_kj, _ = electric_field(u_kj, equations)
+            _, E2_ik = electric_field(u_ik, equations)
 
             dive += (derivative_matrix[i, k] * E1_kj +
                      derivative_matrix[j, k] * E2_ik)
+
         end
         dive *= cache.elements.inverse_jacobian[element]
         dive^2
@@ -323,8 +324,8 @@ function analyze(::Val{:l2_dive}, du, u, t,
             u_kj = get_node_vars(u, equations, dg, k, j, element)
             u_ik = get_node_vars(u, equations, dg, i, k, element)
 
-            E1_kj, E2_kj, _ = electric_field(u_kj, equations)
-            E1_ik, E2_ik, _ = electric_field(u_ik, equations)
+            E1_kj, E2_kj = electric_field(u_kj, equations)
+            E1_ik, E2_ik = electric_field(u_ik, equations)
 
             dive += (derivative_matrix[i, k] *
                      (Ja11 * E1_kj + Ja12 * E2_kj) +
