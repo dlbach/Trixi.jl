@@ -15,16 +15,19 @@ end
 varnames(::typeof(cons2cons), ::MaxwellEquations2D) = ("E1", "E2", "B")
 varnames(::typeof(cons2prim), ::MaxwellEquations2D) = ("E1", "E2", "B")
 
-electric_field(u, equations::GLMMaxwellEquations2D) = SVector(u[1], u[2])
+@inline electric_field(u, equations::MaxwellEquations2D) = SVector(u[1], u[2])
+
+# Since we do not use the charge density anywhere, we only calculate homogeneous divergence errors
+@inline scaled_charge_density(x, u, t, source_terms, equations::MaxwellEquations2D) = 0.0
 
 # Convert conservative variables to primitive
-@inline cons2prim(u, equation::MaxwellEquations2D) = u
+@inline cons2prim(u, equations::MaxwellEquations2D) = u
 
 # Convert conservative variables to entropy variables
-@inline cons2entropy(u, equation::MaxwellEquations2D) = u
+@inline cons2entropy(u, equations::MaxwellEquations2D) = u
 
-function default_analysis_integrals(::IdealGlmMhdEquations2D)
-    (Val(:l2_dive), Val(:l2_e_normal_jump))
+function default_analysis_integrals(::MaxwellEquations2D)
+    (Val(:l2_dive), )
 end
 
 @inline function flux(u, orientation::Integer, equations::MaxwellEquations2D)

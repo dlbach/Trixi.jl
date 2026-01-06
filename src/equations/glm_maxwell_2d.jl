@@ -8,7 +8,7 @@
 struct GLMMaxwellEquations2D{RealT <: Real} <: AbstractGLMMaxwellEquations{2, 4}
     speed_of_light::RealT # c
     c_h::RealT # GLM cleaning speed
-    function GLMMaxwellEquations2D(c = 299_792_458.0, c_h = 2.0)
+    function GLMMaxwellEquations2D(c = 299_792_458.0, c_h = 1.0)
         new{typeof(c_h)}(c, c_h)
     end
 end
@@ -22,11 +22,17 @@ end
 varnames(::typeof(cons2cons), ::GLMMaxwellEquations2D) = ("E1", "E2", "B", "Psi")
 varnames(::typeof(cons2prim), ::GLMMaxwellEquations2D) = ("E1", "E2", "B", "Psi")
 
-function default_analysis_integrals(::IdealGlmMhdEquations2D)
-    (Val(:l2_dive), Val(:l2_e_normal_jump))
+function default_analysis_integrals(::GLMMaxwellEquations2D)
+    #(Val(:l2_dive), Val(:l2_e_normal_jump))
+    (Val(:l2_dive), )
 end
 
-electric_field(u, equations::GLMMaxwellEquations2D) = SVector(u[1], u[2])
+@inline electric_field(u, equations::GLMMaxwellEquations2D) = SVector(u[1], u[2])
+
+@inline scaled_charge_density(u, x, t, source_terms::Nothing, equations::GLMMaxwellEquations2D) = 0.0
+
+@inline scaled_charge_density(u, x, t, source_terms, equations::GLMMaxwellEquations2D) = source_terms(u, x, t, equations)[4] / equations.c_h^2
+
 
 @inline function flux(u, orientation::Integer, equations::GLMMaxwellEquations2D)
     c_sqr = equations.speed_of_light^2
@@ -145,20 +151,20 @@ function boundary_condition_perfect_conducting_wall(
     equations::GLMMaxwellEquations2D,
 )
     if orientation == 1
-        psi_outer = 2.0f0 * equations.c_h* u_inner[1] / equations.speed_of_light
+        psi_outer = 2.0f0 * equations.c_h * u_inner[1] / equations.speed_of_light
     else
         psi_outer = 2.0f0 * equations.c_h * u_inner[2] / equations.speed_of_light
     end
     if iseven(direction)
         return surface_flux_function(
             u_inner,
-            SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] - psi_outer),
+            SVector(-u_inner[1], -u_inner[2], u_inner[3], u_inner[4] - psi_outer),
             orientation,
             equations,
         )
     else
         return surface_flux_function(
-            SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] + psi_outer),
+            SVector(-u_inner[1], -u_inner[2], u_inner[3], u_inner[4] + psi_outer),
             u_inner,
             orientation,
             equations,

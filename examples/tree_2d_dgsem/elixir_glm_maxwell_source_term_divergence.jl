@@ -43,7 +43,7 @@ save_solution_callback = SaveSolutionCallback(interval = 100, save_initial_solut
                                               output_directory = "out")
 
 cfl = 0.5e-1
-tspan = (0.0, 1e-8)
+tspan = (0.0, 5e-9)
 
 ode = semidiscretize(semi, tspan)
 summary_callback = SummaryCallback()
@@ -56,4 +56,4 @@ callbacks = CallbackSet(summary_callback, analysis_callback, stepsize_callback,
 
 sol = solve(ode, CarpenterKennedy2N54(williamson_condition = false),
             dt = 1.0, # solve needs some value here but it will be overwritten by the stepsize_callback
-            save_everystep = false, callback = callbacks);
+            save_everystep = false, callback = callbacks, maxiters = Inf);

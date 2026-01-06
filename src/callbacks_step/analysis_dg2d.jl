@@ -284,8 +284,17 @@ function analyze(::typeof(entropy_timederivative), du, u, t,
     end
 end
 
+# To calculate the divergence error for the electric field, we need the charge density.
+# For the GLMMaxwell equations the charge density is given 
+# by the source terms of the Lagrange multiplier equation, so we have to overload at an earlier stage
+# to make the source terms available to the analyzer.
+function analyze(quantity::Val{:l2_dive}, du, u, t, semi::AbstractSemidiscretization)
+    mesh, equations, solver, cache = mesh_equations_solver_cache(semi)
+    analyze(quantity::Val{:l2_dive}, du, u, t, semi.source_terms, mesh, equations, solver, cache)
+end
+
 function analyze(::Val{:l2_dive}, du, u, t,
-                 mesh::TreeMesh{2},
+                 source_terms, mesh::TreeMesh{2},
                  equations, dg::DGSEM, cache)
     integrate_via_indices(u, mesh, equations, dg, cache, cache,
                           dg.basis.derivative_matrix) do u, i, j, element, equations,
@@ -302,12 +311,16 @@ function analyze(::Val{:l2_dive}, du, u, t,
                      derivative_matrix[j, k] * E2_ik)
 
         end
-        dive *= cache.elements.inverse_jacobian[element]
+        u_ij = get_node_vars(u, equations, dg, i, j, element)
+        x_ij = Trixi.get_node_coords(cache.elements.node_coordinates, equations, dg, i, j,
+                                      element)
+        dive = cache.elements.inverse_jacobian[element] * dive + scaled_charge_density(u_ij, x_ij, t, source_terms, equations)
         dive^2
     end |> sqrt
 end
 
 function analyze(::Val{:l2_dive}, du, u, t,
+                 source_terms,
                  mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2},
                              T8codeMesh{2}},
                  equations, dg::DGSEM, cache)
@@ -332,7 +345,10 @@ function analyze(::Val{:l2_dive}, du, u, t,
                      derivative_matrix[j, k] *
                      (Ja21 * E1_ik + Ja22 * E2_ik))
         end
-        dive *= cache.elements.inverse_jacobian[i, j, element]
+        u_ij = get_node_vars(u, equations, dg, i, j, element)
+        x_ij = Trixi.get_node_coords(cache.elements.node_coordinates, equations, dg, i, j,
+                                      element)
+        dive = cache.elements.inverse_jacobian[i, j, element] * dive + charge_density(u_ij, x_ij, t, source_terms, equations)
         dive^2
     end |> sqrt
 end

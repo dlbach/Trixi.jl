@@ -6,7 +6,7 @@ using Trixi
 
 equation = MaxwellEquations2D()
 
-mesh = TreeMesh((-pi, -pi), (pi, pi), initial_refinement_level = 2, n_cells_max = 10^4)
+mesh = TreeMesh((-pi, -pi), (pi, pi), initial_refinement_level = 0, n_cells_max = 10^4)
 solver = DGSEM(3, Trixi.flux_upwind)
 semi = SemidiscretizationHyperbolic(mesh, equation, Trixi.initial_condition_convergence,
                                     solver)
