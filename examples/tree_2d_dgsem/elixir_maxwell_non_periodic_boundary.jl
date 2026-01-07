@@ -23,7 +23,7 @@ analysis_callback = AnalysisCallback(semi, interval = analysis_interval,
                                      save_analysis = true)
 
 cfl = 1.0
-tspan = (0.0, 1e-6)
+tspan = (0.0, 5e-8)
 
 ode = semidiscretize(semi, tspan)
 summary_callback = SummaryCallback()

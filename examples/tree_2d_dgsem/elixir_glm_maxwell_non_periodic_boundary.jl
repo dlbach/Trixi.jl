@@ -32,17 +32,15 @@ function Trixi.boundary_condition_truncation(u_inner, orientation_or_normal_dire
                                         equations::GLMMaxwellEquations2D)
     if iseven(direction)
         return surface_flux_function(u_inner,
-                                    SVector(u_inner[1], u_inner[2],
-                                    u_inner[3], u_inner[4]),
+                                    SVector(0, 0, 0, 0),
                                     orientation_or_normal_direction, equations)
     else
-        return surface_flux_function(SVector(u_inner[1], u_inner[2],
-                                    u_inner[3], u_inner[4]), u_inner,
+        return surface_flux_function(SVector(0, 0, 0, 0), u_inner,
                                     orientation_or_normal_direction, equations)
     end
 end
 
-equation = GLMMaxwellEquations2D(299_792_458.0, 1.0)
+equation = GLMMaxwellEquations2D(299_792_458.0, 0.00001)
 boundary_conditions = (x_neg = Trixi.boundary_condition_irradiation,
                        x_pos = Trixi.boundary_condition_truncation,
                        y_neg = Trixi.boundary_condition_perfect_conducting_wall,
@@ -65,7 +63,7 @@ save_solution_callback = SaveSolutionCallback(interval = 100000,
                                               output_directory = "out")
 
 cfl = 0.5
-tspan = (0.0, 2e-9)
+tspan = (0.0, 3e-7)
 
 ode = semidiscretize(semi, tspan)
 summary_callback = SummaryCallback()

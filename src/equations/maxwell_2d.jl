@@ -179,9 +179,9 @@ function boundary_condition_truncation(u_inner,
                                        surface_flux_function,
                                        equations::MaxwellEquations2D)
     if iseven(direction)
-        return surface_flux_function(u_inner, u_inner, orientation, equations)
+        return surface_flux_function(u_inner, SVector(0, 0, 0), orientation, equations)
     else
-        return surface_flux_function(u_inner, u_inner, orientation, equations)
+        return surface_flux_function(SVector(0, 0, 0), u_inner, orientation, equations)
     end
 end
 
