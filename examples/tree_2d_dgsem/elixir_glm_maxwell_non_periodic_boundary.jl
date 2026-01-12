@@ -3,6 +3,52 @@ using Trixi
 
 ###############################################################################
 # semidiscretization of the Maxwell equations
+
+function Trixi.initial_condition_test(x, t, equations::GLMMaxwellEquations2D)
+    c = equations.speed_of_light
+    c_sqr = equations.speed_of_light^2
+    k_orth = pi
+    k_par = pi
+    omega = sqrt(k_orth^2 + k_par^2) * c
+    e1 = -(k_orth / k_par) * sin(k_orth * x[2]) * cos(k_par * x[1] - omega * t)
+    e2 = cos(k_orth * x[2]) * sin(k_par * x[1] - omega * t)
+    b = (omega / (k_par * c_sqr)) * cos(k_orth * x[2]) * sin(k_par * x[1] - omega * t)
+
+    return SVector(e1, e2, b, 0.0f0)
+end
+
+
+function Trixi.boundary_condition_perfect_conducting_wall(
+    u_inner,
+    orientation,
+    direction,
+    x,
+    t,
+    surface_flux_function,
+    equations::GLMMaxwellEquations2D,
+)
+    if orientation == 1
+        psi_outer = 2.0f0 * equations.c_h * u_inner[1] / equations.speed_of_light
+    else
+        psi_outer = 2.0f0 * equations.c_h * u_inner[2] / equations.speed_of_light
+    end
+    if iseven(direction)
+        return surface_flux_function(
+            u_inner,
+            SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] - psi_outer),
+            orientation,
+            equations,
+        )
+    else
+        return surface_flux_function(
+            SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] - psi_outer),
+            u_inner,
+            orientation,
+            equations,
+        )
+    end
+end
+
 function Trixi.boundary_condition_irradiation(u_inner, orientation_or_normal_direction, direction,
                                         x, t,
                                         surface_flux_function,
@@ -17,11 +63,11 @@ function Trixi.boundary_condition_irradiation(u_inner, orientation_or_normal_dir
     if iseven(direction)
         return surface_flux_function(u_inner,
                                      SVector(2 * e1 - u_inner[1], 2 * e2 - u_inner[2],
-                                             u_inner[3], u_inner[4] + factor * (e1 - u_inner[1])),
+                                             u_inner[3], -u_inner[4] + factor * (e2 - u_inner[2])),
                                      orientation_or_normal_direction, equations)
     else
         return surface_flux_function(SVector(2 * e1 - u_inner[1], 2 * e2 - u_inner[2],
-                                             u_inner[3], u_inner[4] - factor * (e1 - u_inner[1])), u_inner,
+                                             u_inner[3], -u_inner[4] + factor * (e2 - u_inner[2])), u_inner,
                                      orientation_or_normal_direction, equations)
     end
 end
@@ -40,8 +86,8 @@ function Trixi.boundary_condition_truncation(u_inner, orientation_or_normal_dire
     end
 end
 
-equation = GLMMaxwellEquations2D(299_792_458.0, 0.00001)
-boundary_conditions = (x_neg = Trixi.boundary_condition_irradiation,
+equation = GLMMaxwellEquations2D(299_792_458.0, 0.001)
+boundary_conditions = (x_neg = Trixi.boundary_condition_truncation,
                        x_pos = Trixi.boundary_condition_truncation,
                        y_neg = Trixi.boundary_condition_perfect_conducting_wall,
                        y_pos = Trixi.boundary_condition_perfect_conducting_wall)
@@ -63,7 +109,7 @@ save_solution_callback = SaveSolutionCallback(interval = 100000,
                                               output_directory = "out")
 
 cfl = 0.5
-tspan = (0.0, 3e-7)
+tspan = (0.0, 1e-7)
 
 ode = semidiscretize(semi, tspan)
 summary_callback = SummaryCallback()
@@ -76,4 +122,4 @@ callbacks = CallbackSet(summary_callback, analysis_callback, stepsize_callback,
 
 sol = solve(ode, CarpenterKennedy2N54(williamson_condition = false),
             dt = 1.0, # solve needs some value here but it will be overwritten by the stepsize_callback
-            save_everystep = false, callback = callbacks);
+            save_everystep = false, callback = callbacks, maxiters = Inf);

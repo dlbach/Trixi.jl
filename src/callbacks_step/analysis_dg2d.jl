@@ -314,7 +314,7 @@ function analyze(::Val{:l2_dive}, du, u, t,
         u_ij = get_node_vars(u, equations, dg, i, j, element)
         x_ij = Trixi.get_node_coords(cache.elements.node_coordinates, equations, dg, i, j,
                                       element)
-        dive = cache.elements.inverse_jacobian[element] * dive + scaled_charge_density(u_ij, x_ij, t, source_terms, equations)
+        dive = cache.elements.inverse_jacobian[element] * dive - scaled_charge_density(u_ij, x_ij, t, source_terms, equations)
         dive^2
     end |> sqrt
 end
@@ -348,7 +348,7 @@ function analyze(::Val{:l2_dive}, du, u, t,
         u_ij = get_node_vars(u, equations, dg, i, j, element)
         x_ij = Trixi.get_node_coords(cache.elements.node_coordinates, equations, dg, i, j,
                                       element)
-        dive = cache.elements.inverse_jacobian[i, j, element] * dive + charge_density(u_ij, x_ij, t, source_terms, equations)
+        dive = cache.elements.inverse_jacobian[i, j, element] * dive - charge_density(u_ij, x_ij, t, source_terms, equations)
         dive^2
     end |> sqrt
 end
