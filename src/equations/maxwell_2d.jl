@@ -92,26 +92,6 @@ end
 end
 
 function boundary_condition_perfect_conducting_wall(u_inner,
-                                                    orientation,
-                                                    direction,
-                                                    x,
-                                                    t,
-                                                    surface_flux_function,
-                                                    equations::MaxwellEquations2D)
-    if iseven(direction)
-        return surface_flux_function(u_inner,
-                                     SVector(-u_inner[1], -u_inner[2], u_inner[3]),
-                                     orientation,
-                                     equations)
-    else
-        return surface_flux_function(SVector(-u_inner[1], -u_inner[2], u_inner[3]),
-                                     u_inner,
-                                     orientation,
-                                     equations)
-    end
-end
-
-function boundary_condition_perfect_conducting_wall(u_inner,
                                                     normal_direction::AbstractVector,
                                                     x,
                                                     t,
@@ -121,34 +101,6 @@ function boundary_condition_perfect_conducting_wall(u_inner,
                                  SVector(-u_inner[1], -u_inner[2], u_inner[3]),
                                  normal_direction,
                                  equations)
-end
-
-function boundary_condition_irradiation(u_inner,
-                                        orientation,
-                                        direction,
-                                        x,
-                                        t,
-                                        surface_flux_function,
-                                        equations::MaxwellEquations2D)
-    c = equations.speed_of_light
-    k_orth = pi
-    k_par = pi
-    omega = sqrt(k_orth^2 + k_par^2) * c
-    e1 = -(k_orth / k_par) * sin(k_orth * x[2]) * cos(k_par * x[1] - omega * t)
-    e2 = cos(k_orth * x[2]) * sin(k_par * x[1] - omega * t)
-    if iseven(direction)
-        return surface_flux_function(u_inner,
-                                     SVector(2.0f0 * e1 - u_inner[1],
-                                             2.0f0 * e2 - u_inner[2], u_inner[3]),
-                                     orientation,
-                                     equations)
-    else
-        return surface_flux_function(SVector(2.0f0 * e1 - u_inner[1],
-                                             2.0f0 * e2 - u_inner[2], u_inner[3]),
-                                     u_inner,
-                                     orientation,
-                                     equations)
-    end
 end
 
 function boundary_condition_irradiation(u_inner,
@@ -171,19 +123,6 @@ function boundary_condition_irradiation(u_inner,
                                  equations)
 end
 
-function boundary_condition_truncation(u_inner,
-                                       orientation,
-                                       direction,
-                                       x,
-                                       t,
-                                       surface_flux_function,
-                                       equations::MaxwellEquations2D)
-    if iseven(direction)
-        return surface_flux_function(u_inner, SVector(0, 0, 0), orientation, equations)
-    else
-        return surface_flux_function(SVector(0, 0, 0), u_inner, orientation, equations)
-    end
-end
 
 function boundary_condition_truncation(u_inner,
                                        normal_direction::AbstractVector,

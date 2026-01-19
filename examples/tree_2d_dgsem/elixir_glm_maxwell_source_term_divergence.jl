@@ -21,15 +21,9 @@ function initial_condition_zero(x, t, equations::GLMMaxwellEquations2D)
 end
 
 equation = GLMMaxwellEquations2D(299_792_458.0, 100.0)
-boundary_conditions = (x_neg = Trixi.boundary_condition_perfect_conducting_wall,
-                       x_pos = Trixi.boundary_condition_perfect_conducting_wall,
-                       y_neg = Trixi.boundary_condition_perfect_conducting_wall,
-                       y_pos = Trixi.boundary_condition_perfect_conducting_wall)
-mesh = TreeMesh((0.0, 0.0), (1.0, 1.0), initial_refinement_level = 2, n_cells_max = 10^4,
-                periodicity = false)
+mesh = TreeMesh((0.0, 0.0), (1.0, 1.0), initial_refinement_level = 2, n_cells_max = 10^4)
 solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_upwind)
-semi = SemidiscretizationHyperbolic(mesh, equation, initial_condition_zero, solver,
-                                    boundary_conditions = boundary_conditions,
+semi = SemidiscretizationHyperbolic(mesh, equation, initial_condition_zero, solver
                                     source_terms = source_term_function)
 
 ###############################################################################

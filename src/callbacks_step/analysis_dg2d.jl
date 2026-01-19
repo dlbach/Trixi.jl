@@ -366,13 +366,17 @@ function analyze(::Val{:l2_e_normal_jump}, du, u, t,
             for i in eachnode(dg)
                 # Call pointwise Riemann solver
                 u_ll, u_rr = get_surface_node_vars(u, equations, dg, i, interface)
-                normal_jump += u_ll[1] - u_rr[1]
+                E1_ll, _ = electric_field(u_ll, equations)
+                E1_rr, _ = electric_field(u_rr, equations)
+                normal_jump += (E1_ll - E1_rr)^2
             end
         else
             for i in eachnode(dg)
                 # Call pointwise Riemann solver
                 u_ll, u_rr = get_surface_node_vars(u, equations, dg, i, interface)
-                normal_jump += u_ll[2] - u_rr[2]
+                _, E2_ll = electric_field(u_ll, equations)
+                _, E2_rr = electric_field(u_rr, equations)
+                normal_jump += (E2_ll[2] - E2_rr[2])^2
             end
         end
         normal_jump^2
