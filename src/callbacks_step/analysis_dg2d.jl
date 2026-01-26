@@ -195,9 +195,9 @@ function integrate_via_indices(func::Func, u,
 
     # Use quadrature to numerically integrate over entire domain
     @batch reduction=(+, integral) for element in eachelement(dg, cache)
-        volume_jacobian_ = volume_jacobian(element, mesh, cache)
-        for j in eachnode(dg), i in eachnode(dg)
-            integral += volume_jacobian_ * weights[i] * weights[j] *
+        jacobian_ = volume_jacobian(element, mesh, cache)
+        for i in eachnode(dg)
+            integral += jacobian_ * weights[i] * weights[j] *
                         func(u, i, j, element, equations, dg, args...)
         end
     end
@@ -240,6 +240,34 @@ function integrate_via_indices(func::Func, u,
 
     return integral
 end
+
+function integrate_interfaces_via_indices(func::Func, u,
+                               mesh::TreeMesh{2}, equations, dg::DGSEM, cache,
+                               args...; normalize = true) where {Func}
+    @unpack weights = dg.basis
+    @unpack interfaces = cache
+
+    # Initialize integral with zeros of the right shape
+    integral = zero(func(u, 1, 1, equations, dg, args...))
+
+    # Use quadrature to numerically integrate over entire domain
+    @batch reduction=(+, integral) for interface in eachinterface(dg, cache)
+        neighbor_l, neighbour_r = interfaces.neighbor_ids[interface]
+        jacobian = inv(max(inv(cache.elements.inverse_jacobian[neighbor_l], inv(cache.elements.inverse_jacobian[neighbor_r])))
+        for i in eachnode(dg)
+            integral += jacobian * weights[i] *
+                        func(u, i, interface, equations, dg, args...)
+        end
+    end
+
+    # Normalize with total volume
+    if normalize
+        integral = integral / total_volume(mesh)
+    end
+
+    return integral
+end
+
 
 function integrate(func::Func, u,
                    mesh::Union{TreeMesh{2}, StructuredMesh{2}, StructuredMeshView{2},
@@ -358,9 +386,9 @@ function analyze(::Val{:l2_e_normal_jump}, du, u, t,
                  mesh::TreeMesh{2},
                  equations, dg::DGSEM, cache)
     integrate_surface_via_indices(u, mesh, equations, dg, cache, cache,
-                          dg.basis.derivative_matrix) do u, i, j, element, equations,
+                          dg.basis.derivative_matrix) do u, i, element, equations,
                                                          dg, cache, derivative_matrix                                                        
-        @unpack u, neighbor_ids, orientations = cache.interfaces
+        @unpack u, orientations = cache.interfaces
         normal_jump = zero(eltype(u))
         if orientations[interface] == 1
             for i in eachnode(dg)
