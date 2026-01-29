@@ -94,14 +94,14 @@ function source_term_function(u, x, t, equations::GLMMaxwellEquations2D)
     return SVector(0.0, 0.0, 0.0, -2*pi*sin(pi*x[1])*sin(pi*x[2]) * equations.c_h^2)
 end
 
-equation = GLMMaxwellEquations2D(299_792_458.0, 1.0)
+equation = GLMMaxwellEquations2D(299_792_458.0, 1e0)
 boundary_conditions = (x_neg = Trixi.boundary_condition_irradiation,
                        x_pos = Trixi.boundary_condition_irradiation,
                        y_neg = Trixi.boundary_condition_perfect_conducting_wall,
                        y_pos = Trixi.boundary_condition_perfect_conducting_wall)
 mesh = TreeMesh((0.0, 0.0), (1.0, 1.0), initial_refinement_level = 2, n_cells_max = 10^4,
                 periodicity = false)
-solver = DGSEM(polydeg = 1, surface_flux = Trixi.flux_upwind)
+solver = DGSEM(polydeg = 2, surface_flux = Trixi.flux_upwind)
 semi = SemidiscretizationHyperbolic(mesh, equation, Trixi.initial_condition_test, solver,
                                     boundary_conditions = boundary_conditions, source_terms = source_term_function)
 
@@ -117,7 +117,7 @@ save_solution_callback = SaveSolutionCallback(interval = 100000,
                                               output_directory = "out")
 
 cfl = 0.9
-tspan = (0.0, 1e-5)
+tspan = (0.0, 1e-6)
 
 ode = semidiscretize(semi, tspan)
 summary_callback = SummaryCallback()
