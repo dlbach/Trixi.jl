@@ -362,6 +362,17 @@ See also the test section P4estMesh2D with combine_conservative_and_nonconservat
 """
 combine_conservative_and_nonconservative_fluxes(flux, ::AbstractEquations) = False()
 
+"""
+    have_constant_speed(::AbstractEquations)
+
+Indicates whether the characteristic speeds are constant, i.e., independent of the solution.
+Queried in the timestep computation [`StepsizeCallback`](@ref).
+
+This is the default fallback for nonlinear equations.
+
+# Returns
+- `False()`
+"""
 have_constant_speed(::AbstractEquations) = False()
 
 """
@@ -540,7 +551,15 @@ Return the product of the [`density`](@ref) and the [`pressure`](@ref)
 associated to the conserved variables `u` for a given set of
 `equations`, e.g., the [`CompressibleEulerEquations2D`](@ref).
 This can be useful, e.g., as a variable for (shock-cappturing or AMR)
-indicators.
+indicators as it combines two variables which must stay positive into one.
+
+Furthermore, this implementation is for media which are described by an
+ideal gas law alike equation of state more efficient than
+computing [`pressure(u, equations)`](@ref) first and then multiplying with the density.
+This is due to the fact that in computation of the pressure,
+the kinetic energy needs to be computed, which usually involves
+**division** of the squared momenta by the density.
+This operation can be avoided!
 
 `u` is a vector of the conserved variables at a single node, i.e., a vector
 of the correct length `nvariables(equations)`.
@@ -627,6 +646,8 @@ include("compressible_euler_1d.jl")
 include("compressible_euler_2d.jl")
 include("compressible_euler_3d.jl")
 include("compressible_euler_quasi_1d.jl")
+include("equations_of_state.jl")
+include("nonideal_compressible_euler_1d.jl")
 
 # CompressibleEulerMulticomponentEquations
 abstract type AbstractCompressibleEulerMulticomponentEquations{NDIMS, NVARS, NCOMP} <:
@@ -648,7 +669,7 @@ include("passive_tracers.jl")
                                                                                 NCOMP}) where {NDIMS,
                                                                                                NVARS,
                                                                                                NCOMP}
-    NCOMP
+    return NCOMP
 end
 """
     eachcomponent(equations::AbstractCompressibleEulerMulticomponentEquations)
@@ -658,7 +679,7 @@ for the components in `AbstractCompressibleEulerMulticomponentEquations`.
 In particular, not the components themselves are returned.
 """
 @inline function eachcomponent(equations::AbstractCompressibleEulerMulticomponentEquations)
-    Base.OneTo(ncomponents(equations))
+    return Base.OneTo(ncomponents(equations))
 end
 
 # Ideal MHD
@@ -691,6 +712,9 @@ include("glm_multifluid_5m_plasma.jl")
 @inline function ncomponents(::AbstractIdealGlmMhdMulticomponentEquations{NDIMS, NVARS,
                                                                           NCOMP}) where {NDIMS,
                                                                                          NVARS,
+                                                                                         NCOMP
+                                                                                         }
+    return NCOMP
                                                                                          NCOMP}
     NCOMP
 end
@@ -710,7 +734,7 @@ for the components in `AbstractIdealGlmMhdMulticomponentEquations`.
 In particular, not the components themselves are returned.
 """
 @inline function eachcomponent(equations::AbstractIdealGlmMhdMulticomponentEquations)
-    Base.OneTo(ncomponents(equations))
+    return Base.OneTo(ncomponents(equations))
 end
 
 """
@@ -739,6 +763,9 @@ end
                                                                                    NVARS,
                                                                                    NCOMP}
     NCOMP
+                                                                                   NCOMP
+                                                                                   }
+    return NCOMP
 end
 
 """
@@ -749,20 +776,8 @@ for the components in `AbstractIdealGlmMhdMultiIonEquations`.
 In particular, not the components themselves are returned.
 """
 @inline function eachcomponent(equations::AbstractIdealGlmMhdMultiIonEquations)
-    Base.OneTo(ncomponents(equations))
+    return Base.OneTo(ncomponents(equations))
 end
-
-"""
-    eachcomponent(equations::AbstractIdealGlmMhdMultiIonEquations)
-
-Return an iterator over the indices that specify the location in relevant data structures
-for the components in `AbstractIdealGlmMhdMultiIonEquations`.
-In particular, not the components themselves are returned.
-"""
-@inline function eachcomponent(equations::AbstractGLMMultiFluid5MomentPlasmaEquations)
-    Base.OneTo(ncomponents(equations))
-end
-
 
 # Diffusion equation: first order hyperbolic system
 abstract type AbstractHyperbolicDiffusionEquations{NDIMS, NVARS} <:
