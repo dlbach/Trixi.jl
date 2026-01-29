@@ -681,8 +681,22 @@ include("ideal_glm_mhd_multiion.jl")
 include("ideal_glm_mhd_multiion_2d.jl")
 include("ideal_glm_mhd_multiion_3d.jl")
 
+# Multi-fluid 5 Moment GLM equations
+abstract type AbstractGLMMultiFluid5MomentPlasmaEquations{NDIMS, NVARS, NCOMP} <:
+              AbstractEquations{NDIMS, NVARS} end
+include("glm_multifluid_5m_plasma.jl")
+
+
 # Retrieve number of components from equation instance for the multicomponent case
 @inline function ncomponents(::AbstractIdealGlmMhdMulticomponentEquations{NDIMS, NVARS,
+                                                                          NCOMP}) where {NDIMS,
+                                                                                         NVARS,
+                                                                                         NCOMP}
+    NCOMP
+end
+
+# Retrieve number of components from equation instance for the multi-fluid equations
+@inline function ncomponents(::AbstractGLMMultiFluid5MomentPlasmaEquations{NDIMS, NVARS,
                                                                           NCOMP}) where {NDIMS,
                                                                                          NVARS,
                                                                                          NCOMP}
@@ -699,8 +713,28 @@ In particular, not the components themselves are returned.
     Base.OneTo(ncomponents(equations))
 end
 
+"""
+    eachcomponent(equations::AbstractGLMMultiFluid5MomentPlasmaEquations)
+
+Return an iterator over the indices that specify the location in relevant data structures
+for the components in `AbstractGLMMultiFluid5MomentPlasmaEquations`.
+In particular, not the components themselves are returned.
+"""
+@inline function eachcomponent(equations::AbstractGLMMultiFluid5MomentPlasmaEquations)
+    Base.OneTo(ncomponents(equations))
+end
+
 # Retrieve number of components from equation instance for the multi-ion case
 @inline function ncomponents(::AbstractIdealGlmMhdMultiIonEquations{NDIMS, NVARS,
+                                                                    NCOMP}) where {NDIMS,
+                                                                                   NVARS,
+                                                                                   NCOMP}
+    NCOMP
+end
+
+
+# Retrieve number of components from equation instance for the multi-fluid equations
+@inline function ncomponents(::AbstractGLMMultiFluid5MomentPlasmaEquations{NDIMS, NVARS,
                                                                     NCOMP}) where {NDIMS,
                                                                                    NVARS,
                                                                                    NCOMP}
@@ -717,6 +751,18 @@ In particular, not the components themselves are returned.
 @inline function eachcomponent(equations::AbstractIdealGlmMhdMultiIonEquations)
     Base.OneTo(ncomponents(equations))
 end
+
+"""
+    eachcomponent(equations::AbstractIdealGlmMhdMultiIonEquations)
+
+Return an iterator over the indices that specify the location in relevant data structures
+for the components in `AbstractIdealGlmMhdMultiIonEquations`.
+In particular, not the components themselves are returned.
+"""
+@inline function eachcomponent(equations::AbstractGLMMultiFluid5MomentPlasmaEquations)
+    Base.OneTo(ncomponents(equations))
+end
+
 
 # Diffusion equation: first order hyperbolic system
 abstract type AbstractHyperbolicDiffusionEquations{NDIMS, NVARS} <:

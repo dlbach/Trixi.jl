@@ -267,44 +267,6 @@ function integrate_interfaces_via_indices(func::Func, u,
     return integral
 end
 
-function integrate_interfaces_via_indices(func::Func, u,
-                               mesh::Union{StructuredMesh{2}, StructuredMeshView{2},
-                                           UnstructuredMesh2D, P4estMesh{2},
-                                           T8codeMesh{2}},
-                               equations,
-                               dg::DGSEM, cache, args...; normalize = true) where {Func}
-    @unpack weights = dg.basis
-
-    # Initialize integral with zeros of the right shape
-    integral = zero(eltype(u))
-    total_volume = zero(real(mesh))
-
-    # Use quadrature to numerically integrate over entire domain
-    @batch reduction=(+, total_volume) for element in eachelement(dg, cache)
-        for j in eachnode(dg), i in eachnode(dg)
-            volume_jacobian = abs(inv(cache.elements.inverse_jacobian[i, j, element]))
-            total_volume += volume_jacobian * weights[i] * weights[j]
-        end
-    end
-
-    @batch reduction=(+, integral) for interface in eachinterface(dg, cache)
-        for j in eachnode(dg), i in eachnode(dg)
-            volume_jacobian = abs(inv(cache.elements.inverse_jacobian[i, j, element]))
-            integral += volume_jacobian * weights[i] * weights[j] *
-                        func(u, i, j, element, equations, dg, args...)
-            total_volume += volume_jacobian * weights[i] * weights[j]
-        end
-    end
-
-    # Normalize with total volume
-    if normalize
-        integral = integral / total_volume
-    end
-
-    return integral
-end
-
-
 function integrate_mortars_via_indices(func::Func, u,
                                mesh::TreeMesh{2}, equations, dg::DGSEM, cache,
                                args...; normalize = true) where {Func}
@@ -482,49 +444,6 @@ function analyze(::Val{:l2_e_normal_jump}, du, u, t,
             _, E2l_ll = electric_field(u_lower_ll, equations)
             _, E2l_rr = electric_field(u_lower_rr, equations)
             normal_jump += (E2u_ll - E2u_rr)^2 + (E2l_ll - E2l_rr)^2
-        end
-    end
-
-    return sqrt(a + b)
-end
-
-function analyze(::Val{:l2_b_normal_jump}, du, u, t,
-                 mesh::TreeMesh{2},
-                 equations, dg::DGSEM, cache)
-    a = integrate_interfaces_via_indices(u, mesh, equations, dg, cache, cache) do u, i, interface, equations, dg, cache                                                
-        @unpack u, orientations = cache.interfaces
-        normal_jump = zero(eltype(u))
-        u_ll, u_rr = get_surface_node_vars(u, equations, dg, i, interface)
-        if orientations[interface] == 1
-            B1_ll, _ = magnetic_field(u_ll, equations)
-            B1_rr, _ = magnetic_field(u_rr, equations)
-            normal_jump += (B1_ll - B1_rr)^2
-        else
-            _, B2_ll = magnetic_field(u_ll, equations)
-            _, B2_rr = magnetic_field(u_rr, equations)
-            normal_jump += (B2_ll - B2_rr)^2
-        end
-    end
-
-    b = integrate_mortars_via_indices(u, mesh, equations, dg, cache, cache) do u, i, mortar, equations, dg, cache                                                        
-        @unpack u_upper, u_lower, orientations = cache.mortars
-        normal_jump = zero(eltype(u))
-        u_upper_ll, u_upper_rr = get_surface_node_vars(u_upper, equations, dg,
-                                                        i, mortar)
-        u_lower_ll, u_lower_rr = get_surface_node_vars(u_lower, equations, dg,
-                                                        i, mortar)
-        if orientations[mortar] == 1
-            B1u_ll, _ = magnetic_field(u_upper_ll, equations)
-            B1u_rr, _ = magnetic_field(u_upper_rr, equations)
-            B1l_ll, _ = magnetic_field(u_lower_ll, equations)
-            B1l_rr, _ = magnetic_field(u_lower_rr, equations)
-            normal_jump += (B1u_ll - B1u_rr)^2 + (B1l_ll - B1l_rr)^2
-        else
-            _, B2u_ll = magnetic_field(u_upper_ll, equations)
-            _, B2u_rr = magnetic_field(u_upper_rr, equations)
-            _, B2l_ll = magnetic_field(u_lower_ll, equations)
-            _, B2l_rr = magnetic_field(u_lower_rr, equations)
-            normal_jump += (B2u_ll - B2u_rr)^2 + (B2l_ll - B2l_rr)^2
         end
     end
 

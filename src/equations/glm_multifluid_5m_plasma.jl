@@ -5,35 +5,53 @@
 @muladd begin
 #! format: noindent
 
-struct GLMMaxwellEquations2D{RealT <: Real} <: AbstractGLMMaxwellEquations{2, 4}
-    speed_of_light::RealT # c
-    c_h::RealT # GLM cleaning speed
-    function GLMMaxwellEquations2D(c = 299_792_458.0, c_h = 1.0)
+struct GLMMultiFluid5MomentPlasmaEquations{NVARS, NCOMP, RealT <: Real} <: AbstractGLMMultiFluid5MomentPlasmaEquations{2, NVARS, NCOMP}
+    gammas::SVector{NCOMP, RealT}               # specific heat for each species
+    inv_gammas_minus_one::SVector{NCOMP, RealT}  # = inv(gamma - 1); can be used to write slow divisions as fast multiplications
+    charge_per_mass::SVector{NCOMP, RealT}      # charge of one particle of each species divided by its mass
+    speed_of_light::RealT                       # c
+    c_h::RealT                                  # GLM cleaning speed
+    function GLMMultiFluid5MomentPlasmaEquations(c = 299_792_458.0, c_h = 1.0)
         new{typeof(c_h)}(c, c_h)
+    end
+    function GLMMultiFluid5MomentPlasmaEquations{NVARS, NCOMP, RealT}(gammas::SVector{NCOMP, RealT},
+                                                                    charge_per_mass::SVector{NCOMP, RealT},
+                                                                    c::RealT, c_h::RealT) where {
+                                                                                                                   NVARS,
+                                                                                                                   NCOMP,
+                                                                                                                   RealT <:
+                                                                                                                   Real
+                                                                                                                   }
+        NCOMP >= 1 ||
+            throw(DimensionMismatch("`gammas` and `charge_per_mass` have to be filled with at least one value"))
+
+        gammas, inv_gammas_minus_one = promote(gammas, inv.(gammas - 1))
+
+        new(gammas, inv_gammas_minus_one, charge_per_mass, c, c_h)
     end
 end
 
 # Convert conservative vaiables to primitive
-@inline cons2prim(u, equations::GLMMaxwellEquations2D) = u
+@inline cons2prim(u, equations::GLMMultiFluid5MomentPlasmaEquations) = u
 
 # Convert conservative variables to entropy variables
-@inline cons2entropy(u, equations::GLMMaxwellEquations2D) = u
+@inline cons2entropy(u, equations::GLMMultiFluid5MomentPlasmaEquations) = u
 
-varnames(::typeof(cons2cons), ::GLMMaxwellEquations2D) = ("E1", "E2", "B", "Psi")
-varnames(::typeof(cons2prim), ::GLMMaxwellEquations2D) = ("E1", "E2", "B", "Psi")
+varnames(::typeof(cons2cons), ::GLMMultiFluid5MomentPlasmaEquations) = ("E1", "E2", "B", "Psi")
+varnames(::typeof(cons2prim), ::GLMMultiFluid5MomentPlasmaEquations) = ("E1", "E2", "B", "Psi")
 
-function default_analysis_integrals(::GLMMaxwellEquations2D)
+function default_analysis_integrals(::GLMMultiFluid5MomentPlasmaEquations)
     (Val(:l2_dive), Val(:l2_e_normal_jump))
 end
 
-@inline electric_field(u, equations::GLMMaxwellEquations2D) = SVector(u[1], u[2])
+@inline electric_field(u, equations::GLMMultiFluid5MomentPlasmaEquations) = SVector(u[end-3], u[end-2])
 
-@inline scaled_charge_density(u, x, t, source_terms::Nothing, equations::GLMMaxwellEquations2D) = 0.0
+@inline scaled_charge_density(u, x, t, source_terms::Nothing, equations::GLMMultiFluid5MomentPlasmaEquations) = 0.0
 
-@inline scaled_charge_density(u, x, t, source_terms, equations::GLMMaxwellEquations2D) = source_terms(u, x, t, equations)[4] / equations.c_h^2
+@inline scaled_charge_density(u, x, t, source_terms, equations::GLMMultiFluid5MomentPlasmaEquations) = source_terms(u, x, t, equations)[end] / equations.c_h^2
 
 
-@inline function flux(u, orientation::Integer, equations::GLMMaxwellEquations2D)
+@inline function flux(u, orientation::Integer, equations::GLMMultiFluid5MomentPlasmaEquations)
     c_sqr = equations.speed_of_light^2
 
     if orientation == 1
@@ -51,20 +69,45 @@ end
     return SVector(f1, f2, f3, f4)
 end
 
-@inline function flux(
-    u,
-    normal_direction::AbstractVector,
-    equations::GLMMaxwellEquations2D,
-)
+# Calculates the Euler flux for a single species at a single point
+@inline function flux_euler(u, orientation::Integer, equations::CompressibleEulerEquations2D)
+    rho, rho_v1, rho_v2, rho_e = u
+    v1 = rho_v1 / rho
+    v2 = rho_v2 / rho
+    p = (equations.gamma - 1) * (rho_e - 0.5f0 * (rho_v1 * v1 + rho_v2 * v2))
+    if orientation == 1
+        f1 = rho_v1
+        f2 = rho_v1 * v1 + p
+        f3 = rho_v1 * v2
+        f4 = (rho_e + p) * v1
+    else
+        f1 = rho_v2
+        f2 = rho_v2 * v1
+        f3 = rho_v2 * v2 + p
+        f4 = (rho_e + p) * v2
+    end
+    return SVector(f1, f2, f3, f4)
+end
+
+# Calculates the GLM-Maxwell flux at a single point
+@inline function flux_glm_maxwell(u, orientation::Integer, equations::GLMMultiFluid5MomentPlasmaEquations)
     c_sqr = equations.speed_of_light^2
 
-    f1 = c_sqr * (normal_direction[1] * u[4] - normal_direction[2] * u[3])
-    f2 = c_sqr * (normal_direction[1] * u[3] + normal_direction[2] * u[4])
-    f3 = normal_direction[1] * u[2] - normal_direction[2] * u[1]
-    f4 = equations.c_h^2 * (normal_direction[1] * u[1] + normal_direction[2] * u[2])
+    if orientation == 1
+        f1 = c_sqr * u[4]
+        f2 = c_sqr * u[3]
+        f3 = u[2]
+        f4 = equations.c_h^2 * u[1]
+    else
+        f1 = -c_sqr * u[3]
+        f2 = c_sqr * u[4]
+        f3 = -u[1]
+        f4 = equations.c_h^2 * u[2]
+    end
 
     return SVector(f1, f2, f3, f4)
 end
+
 
 @inline function flux_upwind(
     u_ll,

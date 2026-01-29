@@ -42,7 +42,7 @@ function varnames(::typeof(cons2prim), ::IdealGlmMhdEquations2D)
     ("rho", "v1", "v2", "v3", "p", "B1", "B2", "B3", "psi")
 end
 function default_analysis_integrals(::IdealGlmMhdEquations2D)
-    (entropy_timederivative, Val(:l2_divb), Val(:linf_divb), Val{:l2_b_normal_jump})
+    (entropy_timederivative, Val(:l2_divb), Val(:linf_divb))
 end
 
 # Helper function to extract the magnetic field vector from the conservative variables
