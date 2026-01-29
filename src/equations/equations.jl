@@ -710,13 +710,12 @@ include("glm_multifluid_5m_plasma.jl")
 
 # Retrieve number of components from equation instance for the multicomponent case
 @inline function ncomponents(::AbstractIdealGlmMhdMulticomponentEquations{NDIMS, NVARS,
-                                                                          NCOMP}) where {NDIMS,
+                                                                          NCOMP}) where {
+                                                                                         NDIMS,
                                                                                          NVARS,
                                                                                          NCOMP
                                                                                          }
     return NCOMP
-                                                                                         NCOMP}
-    NCOMP
 end
 
 # Retrieve number of components from equation instance for the multi-fluid equations
@@ -724,7 +723,7 @@ end
                                                                           NCOMP}) where {NDIMS,
                                                                                          NVARS,
                                                                                          NCOMP}
-    NCOMP
+    return NCOMP
 end
 """
     eachcomponent(equations::AbstractIdealGlmMhdMulticomponentEquations)
@@ -753,7 +752,7 @@ end
                                                                     NCOMP}) where {NDIMS,
                                                                                    NVARS,
                                                                                    NCOMP}
-    NCOMP
+    return NCOMP
 end
 
 
@@ -762,9 +761,6 @@ end
                                                                     NCOMP}) where {NDIMS,
                                                                                    NVARS,
                                                                                    NCOMP}
-    NCOMP
-                                                                                   NCOMP
-                                                                                   }
     return NCOMP
 end
 
