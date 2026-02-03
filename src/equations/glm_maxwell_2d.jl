@@ -17,7 +17,7 @@ end
 @inline cons2prim(u, equations::GLMMaxwellEquations2D) = u
 
 # Convert conservative variables to entropy variables
-@inline cons2entropy(u, equations::GLMMaxwellEquations2D) = u
+@inline cons2entropy(u, equations::GLMMaxwellEquations2D) = [u[1]/equations.speed_of_light^2, u[2]/equations.speed_of_light^2, u[3], u[4]/equations.speed_of_light^2]
 
 varnames(::typeof(cons2cons), ::GLMMaxwellEquations2D) = ("E1", "E2", "B", "Psi")
 varnames(::typeof(cons2prim), ::GLMMaxwellEquations2D) = ("E1", "E2", "B", "Psi")

@@ -103,14 +103,14 @@ end
 
 function varnames(::typeof(cons2cons),
                   equations::CompressibleEulerMulticomponentEquations2D)
-    cons = ("rho_v1", "rho_v2", "rho_e")
+    emfield = ("E1", "E2", "B", "Psi")
     rhos = ntuple(n -> "rho" * string(n), Val(ncomponents(equations)))
-    return (cons..., rhos...)
+    return (cons..., emfield...)
 end
 
 function varnames(::typeof(cons2prim),
                   equations::CompressibleEulerMulticomponentEquations2D)
-    prim = ("v1", "v2", "p")
+    emfield = ("E1", "E2", "B", "Psi")
     rhos = ntuple(n -> "rho" * string(n), Val(ncomponents(equations)))
     return (prim..., rhos...)
 end

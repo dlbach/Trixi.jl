@@ -2,21 +2,19 @@
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.
 # See https://ranocha.de/blog/Optimizing_EC_Trixi for further details.
+
 @muladd begin
 #! format: noindent
 
 struct GLMMultiFluid5MomentPlasmaEquations{NVARS, NCOMP, RealT <: Real} <: AbstractGLMMultiFluid5MomentPlasmaEquations{2, NVARS, NCOMP}
     gammas::SVector{NCOMP, RealT}               # specific heat for each species
     inv_gammas_minus_one::SVector{NCOMP, RealT}  # = inv(gamma - 1); can be used to write slow divisions as fast multiplications
-    charge_per_mass::SVector{NCOMP, RealT}      # charge of one particle of each species divided by its mass
+    charge_mass_ratios::SVector{NCOMP, RealT}      # charge of one particle of each species divided by its mass
     speed_of_light::RealT                       # c
     c_h::RealT                                  # GLM cleaning speed
-    function GLMMultiFluid5MomentPlasmaEquations(c = 299_792_458.0, c_h = 1.0)
-        new{typeof(c_h)}(c, c_h)
-    end
     function GLMMultiFluid5MomentPlasmaEquations{NVARS, NCOMP, RealT}(gammas::SVector{NCOMP, RealT},
-                                                                    charge_per_mass::SVector{NCOMP, RealT},
-                                                                    c::RealT, c_h::RealT) where {
+                                                                    charge_mass_ratios::SVector{NCOMP, RealT},
+                                                                    c = 299_792_458.0::RealT, c_h = 1.0::RealT) where {
                                                                                                                    NVARS,
                                                                                                                    NCOMP,
                                                                                                                    RealT <:
@@ -27,9 +25,16 @@ struct GLMMultiFluid5MomentPlasmaEquations{NVARS, NCOMP, RealT <: Real} <: Abstr
 
         gammas, inv_gammas_minus_one = promote(gammas, inv.(gammas - 1))
 
-        new(gammas, inv_gammas_minus_one, charge_per_mass, c, c_h)
+        new(gammas, inv_gammas_minus_one, charge_mass_ratios, c, c_h)
     end
 end
+
+function varnames(::typeof(cons2cons), ::CompressibleEulerEquations2D)
+    return ("rho", "rho_v1", "rho_v2", "rho_e")
+end
+
+varnames(::typeof(cons2prim), ::CompressibleEulerEquations2D) = ("rho", "v1", "v2", "p")
+
 
 # Convert conservative vaiables to primitive
 @inline cons2prim(u, equations::GLMMultiFluid5MomentPlasmaEquations) = u
@@ -50,7 +55,7 @@ end
 
 @inline scaled_charge_density(u, x, t, source_terms, equations::GLMMultiFluid5MomentPlasmaEquations) = source_terms(u, x, t, equations)[end] / equations.c_h^2
 
-
+#=
 @inline function flux(u, orientation::Integer, equations::GLMMultiFluid5MomentPlasmaEquations)
     c_sqr = equations.speed_of_light^2
 
@@ -234,5 +239,5 @@ max_abs_speeds(u, equations::GLMMaxwellEquations2D) =
 
 max_abs_speed_naive(u_ll, u_rr, orientation, equations::GLMMaxwellEquations2D) =
     max(1.0f0, equations.c_h) * equations.speed_of_light
-
+=#
 end # @muladd

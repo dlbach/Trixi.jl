@@ -755,15 +755,6 @@ end
     return NCOMP
 end
 
-
-# Retrieve number of components from equation instance for the multi-fluid equations
-@inline function ncomponents(::AbstractGLMMultiFluid5MomentPlasmaEquations{NDIMS, NVARS,
-                                                                    NCOMP}) where {NDIMS,
-                                                                                   NVARS,
-                                                                                   NCOMP}
-    return NCOMP
-end
-
 """
     eachcomponent(equations::AbstractIdealGlmMhdMultiIonEquations)
 
