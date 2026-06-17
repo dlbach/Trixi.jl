@@ -75,7 +75,7 @@ end
 # Convert conservative vaiables to primitive
 @inline function cons2prim(u, equations::GlmMultiFluid5MomentPlasmaEquations3D)
     prims_euler = SVector(ntuple(i -> cons2prim_euler(u, i, equations), ncomponents(equations)))
-    prims_glm = SVector(u[end-3], u[end-2], u[end-1], u[end])
+    prims_glm = SVector(u[end-7], u[end-6], u[end-5], u[end-4], u[end-3], u[end-2], u[end-1], u[end])
     return vcat(reduce(vcat, prims_euler), prims_glm)
 end
 
@@ -98,29 +98,32 @@ end
 
 # Convert primitive to conservative variables
 @inline function prim2cons_euler(prim, i, equations::GlmMultiFluid5MomentPlasmaEquations3D)
-    rho, v1, v2, v3, p = view(u, (8*i-7):(8*i))
+    rho, v1, v2, v3, p = view(u, (5*i-4):(5*i))
     rho_v1 = rho * v1
     rho_v2 = rho * v2
     rho_v3 = rho * v3
     rho_e = p * equations.inv_gammas_minus_one[i] + 0.5f0 * (rho_v1 * v1 + rho_v2 * v2 + rho_v3 * v3)
-    return SVector(rho, rho_v1, rho_v2, rho_e)
+    return SVector(rho, rho_v1, rho_v2, rho_v3, rho_e)
 end
 
 # Convert conservative variables to entropy variables
 @inline function cons2entropy(u, equations::GlmMultiFluid5MomentPlasmaEquations3D)
     entropy_euler = SVector(ntuple(i -> cons2entropy_euler(u, i, equations), ncomponents(equations)))
-    entropy_glm = SVector(u[end-3]*equations.permittivity, u[end-2]*equations.permittivity, 
-                        u[end-1]/equations.permeability, u[end]/equations.permeability) / equations.T_min
+    entropy_glm = SVector(w[end-7]*equations.permittivity, w[end-6]*equations.permittivity, 
+                          w[end-5]*equations.permittivity, w[end-4]/equations.permeability, 
+                          w[end-3]/equations.permeability, w[end-2]/equations.permeability,
+                          w[end-1]/equations.permeability, w[end]*equations.permittivity) / equations.T_min
     return vcat(reduce(vcat, entropy_euler), entropy_glm)
 end
 
 @inline function cons2entropy_euler(u, i, equations::GlmMultiFluid5MomentPlasmaEquations3D)
-    rho, rho_v1, rho_v2, rho_e = view(u, (4*i-3):(4*i))
+    rho, rho_v1, rho_v2, rho_v3, rho_e = view(u, (5*i-4):(5*i))
     gas_constant = equations.gas_constants[i]
 
     v1 = rho_v1 / rho
     v2 = rho_v2 / rho
-    v_square = v1^2 + v2^2
+    v3 = rho_v3 / rho
+    v_square = v1^2 + v2^2 + v3^2
     p = (equations.gammas[i] - 1) * (rho_e - 0.5f0 * rho * v_square)
     s = log(p) - equations.gammas[i] * log(rho)
     rho_p = rho / p
@@ -129,16 +132,19 @@ end
          0.5f0 * rho_p * v_square)
     w2 = gas_constant * rho_p * v1
     w3 = gas_constant * rho_p * v2
-    w4 = inv(equations.T_min) - gas_constant * rho_p
+    w4 = gas_constant * rho_p * v3
+    w5 = inv(equations.T_min) - gas_constant * rho_p
 
-    return SVector(w1, w2, w3, w4)
+    return SVector(w1, w2, w3, w4, w5)
 end
 
 # Convert entropy variables to conservative variables
 @inline function entropy2cons(w, equations::GlmMultiFluid5MomentPlasmaEquations3D)
     cons_euler = SVector(ntuple(i -> entropy2cons_euler(w, i, equations), ncomponents(equations)))
-    cons_glm = equations.T_min * SVector(w[end-3]/equations.permittivity, w[end-2]/equations.permittivity, 
-                                        w[end-1]*equations.permeability, w[end]*equations.permeability)
+    cons_glm = equations.T_min * SVector(w[end-7]/equations.permittivity, w[end-6]/equations.permittivity, 
+                                        w[end-5]/equations.permittivity, w[end-4]*equations.permeability, 
+                                        w[end-3]*equations.permeability, w[end-2]*equations.permeability,
+                                        w[end-1]*equations.permeability, w[end]/equations.permittivity)
     return vcat(reduce(vcat, cons_euler), cons_glm)
 end
 
@@ -149,29 +155,31 @@ end
     inv_gamma_minus_one = equations.inv_gammas_minus_one[i]
     # convert to entropy `-rho * s` used by Hughes, France, Mallet (1986)
     # instead of `-rho * s / (gamma - 1)`
-    V1, V2, V3, V5 = view(w, (4*i-3):(4*i)) .* (gamma - 1)/equations.gas_constants[i]
-    V5 -= (gamma - 1)/(equations.T_min * equations.gas_constants[i])
+    V1, V2, V3, V4, V5 = view(w, (4*i-3):(4*i)) / equations.gas_constants[i]
+    V5 -= inv(equations.T_min * equations.gas_constants[i])
 
     # s = specific entropy, eq. (53)
-    s = gamma - V1 + (V2^2 + V3^2) / (2 * V5)
+    s = (gamma - V1 + (V2^2 + V3^2 + V4^2) / (2 * V5)) * inv_gamma_minus_one
 
     # eq. (52)
-    rho_iota = ((gamma - 1) / (-V5)^gamma)^(inv_gamma_minus_one) *
+    p = inv((-V5)^gamma)^(inv_gamma_minus_one) *
                exp(-s * inv_gamma_minus_one)
 
     # eq. (51)
-    rho = -rho_iota * V5
-    rho_v1 = rho_iota * V2
-    rho_v2 = rho_iota * V3
-    rho_e = rho_iota * (1 - (V2^2 + V3^2) / (2 * V5))
-    return SVector(rho, rho_v1, rho_v2, rho_e)
+    rho = -p * V5
+    rho_v1 = p * V2
+    rho_v2 = p * V3
+    rho_v3 = p * V4
+    rho_e = p * (inv_gamma_minus_one - (V2^2 + V3^2 + V4^2) / (2 * V5))
+    return SVector(rho, rho_v1, rho_v2, rho_v3, rho_e)
 end
+
 
 function default_analysis_integrals(::GlmMultiFluid5MomentPlasmaEquations3D)
     (Val(:l2_dive), Val(:l2_e_normal_jump), entropy_timederivative)
 end
 
-@inline electric_field(u, equations::GlmMultiFluid5MomentPlasmaEquations3D) = SVector(u[end-3], u[end-2])
+@inline electric_field(u, equations::GlmMultiFluid5MomentPlasmaEquations3D) = SVector(u[end-7], u[end-6], u[end-5])
 
 @inline function charge_density(u, equations::GlmMultiFluid5MomentPlasmaEquations3D) 
     return sum(densities(u, equations)[i] * equations.charge_mass_ratios[i] for i in 1:ncomponents(equations))
@@ -186,11 +194,11 @@ end
 end
 
 @inline function densities(u, equations::GlmMultiFluid5MomentPlasmaEquations3D)
-    return SVector(ntuple(i -> u[4*i-3], ncomponents(equations)))
+    return SVector(ntuple(i -> u[5*i-4], ncomponents(equations)))
 end
 
 @inline function momenta(u, equations::GlmMultiFluid5MomentPlasmaEquations3D)
-    return SVector(ntuple(i -> SVector(u[4*i-2], u[4*i-1]), ncomponents(equations)))
+    return SVector(ntuple(i -> SVector(u[5*i-3], u[5*i-2], u[5*i-1]), ncomponents(equations)))
 end
 
 
@@ -202,20 +210,29 @@ end
 
 # Calculates the Euler flux for a single species at a single point
 @inline function flux_euler(u, orientation::Integer, i::Integer, equations::GlmMultiFluid5MomentPlasmaEquations3D)
-    rho, rho_v1, rho_v2, rho_e = view(u, (4*i-3):(4*i))
+    rho, rho_v1, rho_v2, rho_v3, rho_e = view(u, (5*i-4):(5*i))
     v1 = rho_v1 / rho
     v2 = rho_v2 / rho
-    p = (equations.gammas[i] - 1) * (rho_e - 0.5f0 * (rho_v1 * v1 + rho_v2 * v2))
+    v3 = rho_v3 / rho
+    p = (equations.gammas[i] - 1) * (rho_e - 0.5f0 * (rho_v1 * v1 + rho_v2 * v2 + rho_v3 * v3))
     if orientation == 1
         f1 = rho_v1
         f2 = rho_v1 * v1 + p
         f3 = rho_v1 * v2
-        f4 = (rho_e + p) * v1
-    else
+        f4 = rho_v1 * v3
+        f5 = (rho_e + p) * v1
+    elseif orientation == 2
         f1 = rho_v2
         f2 = rho_v2 * v1
         f3 = rho_v2 * v2 + p
-        f4 = (rho_e + p) * v2
+        f4 = rho_v2 * v3
+        f5 = (rho_e + p) * v2
+    else orientation == 2
+        f1 = rho_v3
+        f2 = rho_v3 * v1
+        f3 = rho_v3 * v2
+        f4 = rho_v3 * v3 + p
+        f5 = (rho_e + p) * v3
     end
     return SVector(f1, f2, f3, f4)
 end
@@ -300,8 +317,8 @@ See also
 @inline function flux_euler_ranocha(prim_ll, prim_rr, orientation::Integer, i::Integer,
                               equations::GlmMultiFluid5MomentPlasmaEquations3D)
     # Unpack left and right state
-    rho_ll, v1_ll, v2_ll, p_ll = view(prim_ll, (4*i-3):(4*i))
-    rho_rr, v1_rr, v2_rr, p_rr = view(prim_rr, (4*i-3):(4*i))
+    rho_ll, v1_ll, v2_ll, v3_ll, p_ll = view(prim_ll, (4*i-3):(4*i))
+    rho_rr, v1_rr, v2_rr, v3_rr, p_rr = view(prim_rr, (4*i-3):(4*i))
 
     # Compute the necessary mean values
     rho_mean = ln_mean(rho_ll, rho_rr)
@@ -312,24 +329,35 @@ See also
     inv_rho_p_mean = p_ll * p_rr * inv_ln_mean(rho_ll * p_rr, rho_rr * p_ll)
     v1_avg = 0.5f0 * (v1_ll + v1_rr)
     v2_avg = 0.5f0 * (v2_ll + v2_rr)
+    v3_avg = 0.5f0 * (v3_ll + v3_rr)
     p_avg = 0.5f0 * (p_ll + p_rr)
-    velocity_square_avg = 0.5f0 * (v1_ll * v1_rr + v2_ll * v2_rr)
+    velocity_square_avg = 0.5f0 * (v1_ll * v1_rr + v2_ll * v2_rr + v3_ll * v3_rr)
 
     # Calculate fluxes depending on orientation
     if orientation == 1
         f1 = rho_mean * v1_avg
         f2 = f1 * v1_avg + p_avg
         f3 = f1 * v2_avg
-        f4 = f1 *
+        f4 = f1 * v3_avg
+        f5 = f1 *
              (velocity_square_avg + inv_rho_p_mean * equations.inv_gammas_minus_one[i]) +
              0.5f0 * (p_ll * v1_rr + p_rr * v1_ll)
-    else
+    elseif orientation == 2
         f1 = rho_mean * v2_avg
         f2 = f1 * v1_avg
         f3 = f1 * v2_avg + p_avg
-        f4 = f1 *
+        f4 = f1 * v3_avg
+        f5 = f1 *
              (velocity_square_avg + inv_rho_p_mean * equations.inv_gammas_minus_one[i]) +
              0.5f0 * (p_ll * v2_rr + p_rr * v2_ll)
+    else
+        f1 = rho_mean * v3_avg
+        f2 = f1 * v1_avg
+        f3 = f1 * v2_avg
+        f4 = f1 * v3_avg + p_avg
+        f5 = f1 *
+             (velocity_square_avg + inv_rho_p_mean * equations.inv_gammas_minus_one[i]) +
+             0.5f0 * (p_ll * v3_rr + p_rr * v3_ll)
     end
 
     return SVector(f1, f2, f3, f4)
@@ -362,14 +390,15 @@ function source_term_lorentz_euler(prim, x, t, i, equations::GlmMultiFluid5Momen
     charge_mass_ratio = equations.charge_mass_ratios[i]
     gas_constant = equations.gas_constants[i]
     T_min = equations.T_min
-    rho, v1, v2, p = view(prim, (4*i-3):(4*i))
-    E1, E2, B, psi = prim[end-3], prim[end-2], prim[end-1], prim[end]
+    rho, v1, v2, v3,  p = view(prim, (5*i-4):(5*i))
+    E1, E2, E3, B1, B2, B3, psi_E = prim[end-7], prim[end-6], prim[end-5], prim[end-4], prim[end-3], prim[end-2], prim[end-1]
 
     s1 = 0.0f0
-    s2 = charge_mass_ratio * rho * (E1 - B * v2)
-    s3 = charge_mass_ratio * rho * (E2 + B * v1)
-    s4 = charge_mass_ratio * rho * ( (v1 * E1 + v2 * E2) - (equations.c_e * equations.c_sqr * psi)/(1 - gas_constant * T_min * (rho/p)) )
-    return SVector(s1, s2, s3, s4)
+    s2 = charge_mass_ratio * rho * (E1 + v2 * B3 - v3 * B2)
+    s3 = charge_mass_ratio * rho * (E2 + v3 * B1 - v1 * B3)
+    s4 = charge_mass_ratio * rho * (E3 + v1 * B2 - v2 * B1)
+    s5 = charge_mass_ratio * rho * (v1 * E1 + v2 * E2 + v3 * E3 - (equations.c_e * equations.c_sqr * psi)/(1 - gas_constant * T_min * (rho/p)))
+    return SVector(s1, s2, s3, s4, s5)
 end
 
 function source_term_lorentz_glm(u, x, t, equations::GlmMultiFluid5MomentPlasmaEquations3D)

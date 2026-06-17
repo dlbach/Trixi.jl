@@ -308,6 +308,137 @@ function analyze(::typeof(entropy_timederivative), du, u, t,
     end
 end
 
+function analyze(::Val{:l2_dive}, du, u, t,
+                 source_terms, mesh::TreeMesh{3},
+                 equations, dg::DGSEM, cache)
+    integrate_via_indices(u, mesh, equations, dg, cache, cache,
+                          dg.basis.derivative_matrix) do u, i, j, element, equations,
+                                                         dg, cache, derivative_matrix
+        dive = zero(eltype(u))
+        for k in eachnode(dg)
+            u_ljk = get_node_vars(u, equations, dg, l, j, k, element)
+            u_ilk = get_node_vars(u, equations, dg, i, l, k, element)
+            u_ijl = get_node_vars(u, equations, dg, i, j, l, element)
+
+            E1_ljk, _, _ = electric_field(u_ljk, equations)
+            _, E2_ilk, _ = electric_field(u_ilk, equations)
+            _, _, E3_ijl = electric_field(u_ijl, equations)
+
+            dive += (derivative_matrix[i, l] * E1_ljk +
+                     derivative_matrix[j, l] * E2_ilk +
+                     derivative_matrix[k, l] * E3_ijl)
+        end
+        u_ijk = get_node_vars(u, equations, dg, i, j, k, element)
+        x_ijk = Trixi.get_node_coords(cache.elements.node_coordinates, equations, dg, i, j, k,
+                                      element)
+        dive = cache.elements.inverse_jacobian[element] * dive - scaled_charge_density(u_ijk, x_ijk, t, source_terms, equations)
+        dive^2
+    end |> sqrt
+end
+
+function analyze(::Val{:l2_dive}, du, u, t,
+                 source_terms,
+                 mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2},
+                             T8codeMesh{2}},
+                 equations, dg::DGSEM, cache)
+    @unpack contravariant_vectors = cache.elements
+    integrate_via_indices(u, mesh, equations, dg, cache, cache,
+                          dg.basis.derivative_matrix) do u, i, j, element, equations,
+                                                         dg, cache, derivative_matrix
+        dive = zero(eltype(u))
+        # Get the contravariant vectors Ja^1 and Ja^2
+        Ja11, Ja12 = get_contravariant_vector(1, contravariant_vectors, i, j, element)
+        Ja21, Ja22 = get_contravariant_vector(2, contravariant_vectors, i, j, element)
+        # Compute the transformed divergence
+
+        divb = zero(eltype(u))
+        # Get the contravariant vectors Ja^1, Ja^2, and Ja^3
+        Ja11, Ja12, Ja13 = get_contravariant_vector(1, contravariant_vectors,
+                                                    i, j, k, element)
+        Ja21, Ja22, Ja23 = get_contravariant_vector(2, contravariant_vectors,
+                                                    i, j, k, element)
+        Ja31, Ja32, Ja33 = get_contravariant_vector(3, contravariant_vectors,
+                                                    i, j, k, element)
+        # Compute the transformed divergence
+        for l in eachnode(dg)
+            u_ljk = get_node_vars(u, equations, dg, l, j, k, element)
+            u_ilk = get_node_vars(u, equations, dg, i, l, k, element)
+            u_ijl = get_node_vars(u, equations, dg, i, j, l, element)
+
+            E_ljk = magnetic_field(u_ljk, equations)
+            E_ilk = magnetic_field(u_ilk, equations)
+            E_ijl = magnetic_field(u_ijl, equations)
+
+            dive += (derivative_matrix[i, l] *
+                     (Ja11 * E_ljk[1] + Ja12 * E_ljk[2] + Ja13 * E_ljk[3]) +
+                     derivative_matrix[j, l] *
+                     (Ja21 * E_ilk[1] + Ja22 * E_ilk[2] + Ja23 * E_ilk[3]) +
+                     derivative_matrix[k, l] *
+                     (Ja31 * E_ijl[1] + Ja32 * E_ijl[2] + Ja33 * E_ijl[3]))
+        end
+
+        u_ijk = get_node_vars(u, equations, dg, i, j, k, element)
+        x_ijk = Trixi.get_node_coords(cache.elements.node_coordinates, equations, dg, i, j, k,
+                                      element)
+        dive = cache.elements.inverse_jacobian[i, j, k, element] * dive - scaled_charge_density(u_ijk, x_ijk, t, source_terms, equations)
+        dive^2
+    end |> sqrt
+end
+
+
+function analyze(::Val{:l2_e_normal_jump}, du, u, t,
+                 mesh::TreeMesh{3},
+                 equations, dg::DGSEM, cache)
+    a = integrate_interfaces_via_indices(u, mesh, equations, dg, cache, cache) do u, i, j, interface, equations, dg, cache                                                
+        @unpack u, orientations = cache.interfaces
+        normal_jump = zero(eltype(u))
+        u_ll, u_rr = get_surface_node_vars(u, equations, dg, i, j, interface)
+        if orientations[interface] == 1
+            E1_ll, _, _ = electric_field(u_ll, equations)
+            E1_rr, _, _ = electric_field(u_rr, equations)
+            normal_jump += (E1_ll - E1_rr)^2
+        elseif orientations[interface] == 1
+            _, E2_ll, _ = electric_field(u_ll, equations)
+            _, E2_rr, _ = electric_field(u_rr, equations)
+            normal_jump += (E2_ll - E2_rr)^2
+        else
+            _, _, E3_ll = electric_field(u_ll, equations)
+            _, _, E3_rr = electric_field(u_rr, equations)
+            normal_jump += (E3_ll - E3_rr)^2
+        end
+    end
+
+    b = integrate_mortars_via_indices(u, mesh, equations, dg, cache, cache) do u, i, j, mortar, equations, dg, cache                                                        
+        @unpack u_upper, u_lower, orientations = cache.mortars
+        normal_jump = zero(eltype(u))
+        u_upper_ll, u_upper_rr = get_surface_node_vars(u_upper, equations, dg,
+                                                        i, j, mortar)
+        u_lower_ll, u_lower_rr = get_surface_node_vars(u_lower, equations, dg,
+                                                        i, j, mortar)
+        if orientations[mortar] == 1
+            E1u_ll, _, _ = electric_field(u_upper_ll, equations)
+            E1u_rr, _, _ = electric_field(u_upper_rr, equations)
+            E1l_ll, _, _ = electric_field(u_lower_ll, equations)
+            E1l_rr, _, _ = electric_field(u_lower_rr, equations)
+            normal_jump += (E1u_ll - E1u_rr)^2 + (E1l_ll - E1l_rr)^2
+        elseif orientations[mortar] == 2
+            _, E2u_ll, _ = electric_field(u_upper_ll, equations)
+            _, E2u_rr, _ = electric_field(u_upper_rr, equations)
+            _, E2l_ll, _ = electric_field(u_lower_ll, equations)
+            _, E2l_rr, _ = electric_field(u_lower_rr, equations)
+            normal_jump += (E2u_ll - E2u_rr)^2 + (E2l_ll - E2l_rr)^2
+        else
+            _, _, E3u_ll = electric_field(u_upper_ll, equations)
+            _, _, E3u_rr = electric_field(u_upper_rr, equations)
+            _, _, E3l_ll = electric_field(u_lower_ll, equations)
+            _, _, E3l_rr = electric_field(u_lower_rr, equations)
+            normal_jump += (E3u_ll - E3u_rr)^2 + (E3l_ll - E3l_rr)^2
+        end
+    end
+
+    return sqrt(a + b)
+end
+
 function analyze(::Val{:l2_divb}, du, u, t,
                  mesh::TreeMesh{3}, equations,
                  dg::DGSEM, cache)

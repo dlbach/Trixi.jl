@@ -183,6 +183,10 @@ end
     return SVector(ntuple(i -> SVector(u[4*i-2], u[4*i-1]), ncomponents(equations)))
 end
 
+@inline function entropies(u, equations::GlmMultiFluid5MomentPlasmaEquationsEntropy2D)
+    return SVector(ntuple(i -> u[4*i], ncomponents(equations)))
+end
+
 @inline function flux(u, orientation::Integer, equations::GlmMultiFluid5MomentPlasmaEquationsEntropy2D)
     fluxes_euler = ntuple(i -> flux_euler(u, orientation, i, equations), ncomponents(equations))
     flux_glm = flux_glm_maxwell(u, orientation, equations)
@@ -241,6 +245,14 @@ end
     return vcat(reduce(vcat, fluxes_euler), flux_glm)
 end
 
+@inline function flux_energy_upwind(u_ll, u_rr, orientation::Integer, equations::GlmMultiFluid5MomentPlasmaEquationsEntropy2D)
+    prim_ll = cons2prim(u_ll, equations)
+    prim_rr = cons2prim(u_rr, equations)
+    fluxes_euler = SVector(ntuple(i -> flux_euler_energy_con(prim_ll, prim_rr, orientation, i, equations), ncomponents(equations)))
+    flux_glm = flux_glm_upwind(u_ll, u_rr, orientation, equations)
+    return vcat(reduce(vcat, fluxes_euler), flux_glm)
+end
+
 @inline function flux_euler_central(u_ll, u_rr, orientation::Integer, i,
                               equations::GlmMultiFluid5MomentPlasmaEquationsEntropy2D)
     return 0.5f0 * (flux_euler(u_ll, orientation, i, equations) + flux_euler(u_rr, orientation, i, equations))
@@ -295,8 +307,6 @@ end
     v1_avg = 0.5f0 * (v1_ll + v1_rr)
     v2_avg = 0.5f0 * (v2_ll + v2_rr)
     p_avg = 0.5f0 * (p_ll + p_rr)
-    velocity_square_avg = 0.5f0 * (v1_ll * v1_rr + v2_ll * v2_rr)
-
     p_div_rho_ln_ratio = Trixi.ln_ratio(p_div_rho_ll, p_div_rho_rr)
 
     # Calculate fluxes depending on orientation
@@ -355,8 +365,8 @@ function source_term_lorentz_euler(prim, x, t, i, equations::GlmMultiFluid5Momen
     E1, E2, B, psi = prim[end-3], prim[end-2], prim[end-1], prim[end]
 
     s1 = 0
-    s2 = charge_mass_ratio * rho * (E1 - B * v2)
-    s3 = charge_mass_ratio * rho * (E2 + B * v1)
+    s2 = charge_mass_ratio * rho * (E1 + v2 * B)
+    s3 = charge_mass_ratio * rho * (E2 - v1 * B)
     s4 = 0
     return SVector(s1, s2, s3, s4)
 end
@@ -385,6 +395,13 @@ function source_term_lorentz_glm(u, x, t, equations::GlmMultiFluid5MomentPlasmaE
     s4 = equations.c_e * inv_permittivity * charge_density
     
     return SVector(s1, s2, s3, s4)
+end
+
+@inline function density_pressure(u, equations::Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy2D)
+    rhos = densities(u, equations)
+    entr_s = entropies(u, equations)
+    rho_times_p = rhos.^(equations.gammas .+ 1) .* exp.(entr_s ./ rhos)
+    return minimum(rho_times_p)
 end
 
 #=

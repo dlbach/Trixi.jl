@@ -5,16 +5,13 @@ using Trixi
 # semidiscretization of the Maxwell equations
 
 function initial_condition_constant(x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquations2D)
-    return SVector(1.0, 0.2, -0.5, 10.0, 2.0, 3.0, 4.0/equations.c_sqr, 5.0/equations.c_sqr)
+    return SVector(1.0, 0.2, -0.5, 10.0, 1.0, 0.2, -0.5, 10.0, 2.0, 3.0, 4.0/equations.c_sqr, 5.0/equations.c_sqr)
 end
 
-volume_flux = Trixi.flux_ranocha_central
-equation = Trixi.GlmMultiFluid5MomentPlasmaEquations2D(1.4, 1.0, 1.0, 20.0, 10.0)
+equation = Trixi.GlmMultiFluid5MomentPlasmaEquations2D((1.6, 1.6), (1.0, 1.0), (1.0, -1.0), 20.0, 10.0)
 mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), initial_refinement_level = 2, n_cells_max = 10^4)
-
 volume_flux = Trixi.flux_ranocha_central
 surface_flux = Trixi.flux_ranocha_central
-equation = Trixi.GlmMultiFluid5MomentPlasmaEquations2D(1.4, 1.0, 1.0, 1e2, 1e-2, 1e0)
 mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), initial_refinement_level = 2, n_cells_max = 10^4)
 basis = LobattoLegendreBasis(4)
 indicator_sc = IndicatorHennemannGassner(equation, basis,
@@ -27,7 +24,6 @@ volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
                                                  volume_flux_fv = surface_flux)
 
 solver = DGSEM(basis, surface_flux, volume_integral)
-#solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_lax_friedrichs, volume_integral = VolumeIntegralFluxDifferencing(volume_flux))
 semi = SemidiscretizationHyperbolic(mesh, equation,
                                     initial_condition_constant, solver)
 

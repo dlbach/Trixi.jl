@@ -234,7 +234,7 @@ end
 @inline ln_ratio(x::Real, y::Real) = ln_ratio(promote(x, y)...)
 
 @inline function ln_ratio(x::RealT, y::RealT) where {RealT <: Real}
-   return 0.5f0 * (log(x) + log(y) + (x + y) / ln_mean(x, y))
+   return 0.5f0 * (log(x * y) + (x + y)  * inv_ln_mean(x, y))
 end
 
 

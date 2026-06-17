@@ -147,21 +147,21 @@ end
     inv_gamma_minus_one = equations.inv_gammas_minus_one[i]
     # convert to entropy `-rho * s` used by Hughes, France, Mallet (1986)
     # instead of `-rho * s / (gamma - 1)`
-    V1, V2, V3, V5 = view(w, (4*i-3):(4*i)) .* (gamma - 1)/equations.gas_constants[i]
-    V5 -= (gamma - 1)/(equations.T_min * equations.gas_constants[i])
+    V1, V2, V3, V5 = view(w, (4*i-3):(4*i)) / equations.gas_constants[i]
+    V5 -= inv(equations.T_min * equations.gas_constants[i])
 
     # s = specific entropy, eq. (53)
-    s = gamma - V1 + (V2^2 + V3^2) / (2 * V5)
+    s = (gamma - V1 + (V2^2 + V3^2) / (2 * V5)) * inv_gamma_minus_one
 
     # eq. (52)
-    rho_iota = ((gamma - 1) / (-V5)^gamma)^(inv_gamma_minus_one) *
+    p = inv((-V5)^gamma)^(inv_gamma_minus_one) *
                exp(-s * inv_gamma_minus_one)
 
     # eq. (51)
-    rho = -rho_iota * V5
-    rho_v1 = rho_iota * V2
-    rho_v2 = rho_iota * V3
-    rho_e = rho_iota * (1 - (V2^2 + V3^2) / (2 * V5))
+    rho = -p * V5
+    rho_v1 = p * V2
+    rho_v2 = p * V3
+    rho_e = p * (inv_gamma_minus_one - (V2^2 + V3^2) / (2 * V5))
     return SVector(rho, rho_v1, rho_v2, rho_e)
 end
 
@@ -189,6 +189,10 @@ end
 
 @inline function momenta(u, equations::GlmMultiFluid5MomentPlasmaEquations2D)
     return SVector(ntuple(i -> SVector(u[4*i-2], u[4*i-1]), ncomponents(equations)))
+end
+
+@inline function energies(u, equations::GlmMultiFluid5MomentPlasmaEquations2D)
+    return SVector(ntuple(i -> u[4*i], ncomponents(equations)))
 end
 
 
@@ -246,6 +250,14 @@ end
     prim_rr = cons2prim(u_rr, equations)
     fluxes_euler = SVector(ntuple(i -> flux_euler_ranocha(prim_ll, prim_rr, orientation, i, equations), ncomponents(equations)))
     flux_glm = flux_glm_central(u_ll, u_rr, orientation, equations)
+    return vcat(reduce(vcat, fluxes_euler), flux_glm)
+end
+
+@inline function flux_ranocha_upwind(u_ll, u_rr, orientation::Integer, equations::GlmMultiFluid5MomentPlasmaEquations2D)
+    prim_ll = cons2prim(u_ll, equations)
+    prim_rr = cons2prim(u_rr, equations)
+    fluxes_euler = SVector(ntuple(i -> flux_euler_ranocha(prim_ll, prim_rr, orientation, i, equations), ncomponents(equations)))
+    flux_glm = flux_glm_upwind(u_ll, u_rr, orientation, equations)
     return vcat(reduce(vcat, fluxes_euler), flux_glm)
 end
 
@@ -364,8 +376,8 @@ function source_term_lorentz_euler(prim, x, t, i, equations::GlmMultiFluid5Momen
     E1, E2, B, psi = prim[end-3], prim[end-2], prim[end-1], prim[end]
 
     s1 = 0
-    s2 = charge_mass_ratio * rho * (E1 - B * v2)
-    s3 = charge_mass_ratio * rho * (E2 + B * v1)
+    s2 = charge_mass_ratio * rho * (E1 + B * v2)
+    s3 = charge_mass_ratio * rho * (E2 - B * v1)
     s4 = charge_mass_ratio * rho * ( (v1 * E1 + v2 * E2) - (equations.c_e * equations.c_sqr * psi)/(1 - gas_constant * T_min * (rho/p)) )
     return SVector(s1, s2, s3, s4)
 end
@@ -382,6 +394,15 @@ function source_term_lorentz_glm(u, x, t, equations::GlmMultiFluid5MomentPlasmaE
     
     return SVector(s1, s2, s3, s4)
 end
+
+@inline function density_pressure(u, equations::Trixi.GlmMultiFluid5MomentPlasmaEquations2D)
+    rhos = densities(u, equations)
+    rho_vs = momenta(u, equations)
+    rho_e_totals = energies(u, equations)
+    rho_times_p = (equations.gammas[1] - 1) .* (rhos .* rho_e_totals .- 0.5f0 .* dot.(rho_vs, rho_vs))
+    return minimum(rho_times_p)
+end
+
 
 #=
 @inline function flux_upwind(

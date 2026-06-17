@@ -5,17 +5,25 @@ using Trixi
 # semidiscretization of the Maxwell equations
 
 function initial_condition_constant(x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy2D)
-    return SVector(1.0, 0.2, -0.5, -10.0, 2.0, 3.0, 4.0/equations.c_sqr, 5.0/equations.c_sqr)
+    return SVector(1.0, 0.2, -0.5, -10.0, 1.0, 0.2, -0.5, -10.0, 2.0, 3.0, 4.0/equations.c_sqr, 5.0/equations.c_sqr)
 end
 
 volume_flux = Trixi.flux_energy_central
 surface_flux = Trixi.flux_energy_central
-equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy2D(1.4, 1.0, 1.0, 1e2, 1e-2, 1e0)
+equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy2D((1.6, 1.6), (1.0, 1.0), (1.0, -1.0), 1e2, 1e-2, 1e0)
 mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), initial_refinement_level = 2, n_cells_max = 10^4)
 basis = LobattoLegendreBasis(4)
 
-solver = DGSEM(basis, surface_flux)
-#solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_lax_friedrichs, volume_integral = VolumeIntegralFluxDifferencing(volume_flux))
+indicator_sc = IndicatorHennemannGassner(equation, basis,
+                                         alpha_max = 0.5,
+                                         alpha_min = 0.001,
+                                         alpha_smooth = true,
+                                         variable = density_pressure)
+volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
+                                                 volume_flux_dg = volume_flux,
+                                                 volume_flux_fv = surface_flux)
+
+solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_lax_friedrichs, volume_integral = volume_integral)
 semi = SemidiscretizationHyperbolic(mesh, equation,
                                     initial_condition_constant, solver)
 
