@@ -702,11 +702,15 @@ include("ideal_glm_mhd_multiion.jl")
 include("ideal_glm_mhd_multiion_2d.jl")
 include("ideal_glm_mhd_multiion_3d.jl")
 
-# Multi-fluid 5 Moment GLM equations
-abstract type AbstractGLMMultiFluid5MomentPlasmaEquations{NDIMS, NVARS, NCOMP} <:
+# Multi-fluid 5 Moment Glm equations
+abstract type AbstractGlmMultiFluid5MomentPlasmaEquations{NDIMS, NVARS, NCOMP} <:
               AbstractEquations{NDIMS, NVARS} end
-include("glm_multifluid_5m_plasma.jl")
+include("glm_multifluid_5m_plasma_2d.jl")
 
+# Multi-fluid 5 Moment Glm equations entropy version
+abstract type AbstractGlmMultiFluid5MomentPlasmaEquationsEntropy{NDIMS, NVARS, NCOMP} <:
+              AbstractEquations{NDIMS, NVARS} end
+include("glm_multifluid_5m_plasma_entropy_2d.jl")
 
 # Retrieve number of components from equation instance for the multicomponent case
 @inline function ncomponents(::AbstractIdealGlmMhdMulticomponentEquations{NDIMS, NVARS,
@@ -719,7 +723,15 @@ include("glm_multifluid_5m_plasma.jl")
 end
 
 # Retrieve number of components from equation instance for the multi-fluid equations
-@inline function ncomponents(::AbstractGLMMultiFluid5MomentPlasmaEquations{NDIMS, NVARS,
+@inline function ncomponents(::AbstractGlmMultiFluid5MomentPlasmaEquations{NDIMS, NVARS,
+                                                                          NCOMP}) where {NDIMS,
+                                                                                         NVARS,
+                                                                                         NCOMP}
+    return NCOMP
+end
+
+# Retrieve number of components from equation instance for the multi-fluid equations
+@inline function ncomponents(::AbstractGlmMultiFluid5MomentPlasmaEquationsEntropy{NDIMS, NVARS,
                                                                           NCOMP}) where {NDIMS,
                                                                                          NVARS,
                                                                                          NCOMP}
@@ -737,13 +749,24 @@ In particular, not the components themselves are returned.
 end
 
 """
-    eachcomponent(equations::AbstractGLMMultiFluid5MomentPlasmaEquations)
+    eachcomponent(equations::AbstractGlmMultiFluid5MomentPlasmaEquations)
 
 Return an iterator over the indices that specify the location in relevant data structures
-for the components in `AbstractGLMMultiFluid5MomentPlasmaEquations`.
+for the components in `AbstractGlmMultiFluid5MomentPlasmaEquations`.
 In particular, not the components themselves are returned.
 """
-@inline function eachcomponent(equations::AbstractGLMMultiFluid5MomentPlasmaEquations)
+@inline function eachcomponent(equations::AbstractGlmMultiFluid5MomentPlasmaEquations)
+    Base.OneTo(ncomponents(equations))
+end
+
+"""
+    eachcomponent(equations::AbstractGlmMultiFluid5MomentPlasmaEquationsEntropy)
+
+Return an iterator over the indices that specify the location in relevant data structures
+for the components in `AbstractGlmMultiFluid5MomentPlasmaEquations`.
+In particular, not the components themselves are returned.
+"""
+@inline function eachcomponent(equations::AbstractGlmMultiFluid5MomentPlasmaEquationsEntropy)
     Base.OneTo(ncomponents(equations))
 end
 
@@ -804,7 +827,7 @@ abstract type AbstractMaxwellEquations{NDIMS, NVARS} <:
 include("maxwell_1d.jl")
 include("maxwell_2d.jl")
 
-abstract type AbstractGLMMaxwellEquations{NDIMS, NVARS} <:
+abstract type AbstractGlmMaxwellEquations{NDIMS, NVARS} <:
               AbstractEquations{NDIMS, NVARS} end
 include("glm_maxwell_2d.jl")
 

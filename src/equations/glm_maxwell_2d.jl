@@ -5,63 +5,51 @@
 @muladd begin
 #! format: noindent
 
-struct GLMMaxwellEquations2D{RealT <: Real} <: AbstractGLMMaxwellEquations{2, 4}
+struct GlmMaxwellEquations2D{RealT <: Real} <: AbstractGlmMaxwellEquations{2, 4}
     speed_of_light::RealT # c
-    c_h::RealT # GLM cleaning speed
-    function GLMMaxwellEquations2D(c = 299_792_458.0, c_h = 1.0)
-        new{typeof(c_h)}(c, c_h)
+    c_e::RealT # GLM cleaning speed
+    permittivity::RealT 
+    permeability::RealT
+    function GlmMaxwellEquations2D(c_e = 1.0, c = 299_792_458.0, permittivity = 885_418_781_88e-22)
+        permeability = permittivity/c^2
+        new{typeof(c_e)}(c, c_e, permittivity, permeability)
     end
 end
 
 # Convert conservative vaiables to primitive
-@inline cons2prim(u, equations::GLMMaxwellEquations2D) = u
+@inline cons2prim(u, equations::GlmMaxwellEquations2D) = u
 
 # Convert conservative variables to entropy variables
-@inline cons2entropy(u, equations::GLMMaxwellEquations2D) = [u[1]/equations.speed_of_light^2, u[2]/equations.speed_of_light^2, u[3], u[4]/equations.speed_of_light^2]
+@inline cons2entropy(u, equations::GlmMaxwellEquations2D) = [equations.permittivity * u[1], equations.permittivity * u[2], u[3] / equations.permeability, u[4] / equations.permeability]
 
-varnames(::typeof(cons2cons), ::GLMMaxwellEquations2D) = ("E1", "E2", "B", "Psi")
-varnames(::typeof(cons2prim), ::GLMMaxwellEquations2D) = ("E1", "E2", "B", "Psi")
+varnames(::typeof(cons2cons), ::GlmMaxwellEquations2D) = ("E1", "E2", "B", "Psi")
+varnames(::typeof(cons2prim), ::GlmMaxwellEquations2D) = ("E1", "E2", "B", "Psi")
 
-function default_analysis_integrals(::GLMMaxwellEquations2D)
+function default_analysis_integrals(::GlmMaxwellEquations2D)
     (Val(:l2_dive), Val(:l2_e_normal_jump))
 end
 
-@inline electric_field(u, equations::GLMMaxwellEquations2D) = SVector(u[1], u[2])
+@inline electric_field(u, equations::GlmMaxwellEquations2D) = SVector(u[1], u[2])
 
-@inline scaled_charge_density(u, x, t, source_terms::Nothing, equations::GLMMaxwellEquations2D) = 0.0
+@inline scaled_charge_density(u, x, t, source_terms::Nothing, equations::GlmMaxwellEquations2D) = 0.0
 
-@inline scaled_charge_density(u, x, t, source_terms, equations::GLMMaxwellEquations2D) = source_terms(u, x, t, equations)[4] / equations.c_h^2
+@inline scaled_charge_density(u, x, t, source_terms, equations::GlmMaxwellEquations2D) = source_terms(u, x, t, equations)[4] / equations.c_e
 
 
-@inline function flux(u, orientation::Integer, equations::GLMMaxwellEquations2D)
+@inline function flux(u, orientation::Integer, equations::GlmMaxwellEquations2D)
     c_sqr = equations.speed_of_light^2
 
     if orientation == 1
-        f1 = c_sqr * u[4]
+        f1 = equations.c_e * c_sqr * u[4]
         f2 = c_sqr * u[3]
         f3 = u[2]
-        f4 = equations.c_h^2 * u[1]
+        f4 = equations.c_e * u[1]
     else
         f1 = -c_sqr * u[3]
-        f2 = c_sqr * u[4]
+        f2 = equations.c_e * c_sqr * u[4]
         f3 = -u[1]
-        f4 = equations.c_h^2 * u[2]
+        f4 = equations.c_e * u[2]
     end
-
-    return SVector(f1, f2, f3, f4)
-end
-
-@inline function flux(
-    u,
-    normal_direction::AbstractVector,
-    equations::GLMMaxwellEquations2D,
-)
-    c_sqr = equations.speed_of_light^2
-
-    f1 = c_sqr * (normal_direction[1] * u[4] - normal_direction[2] * u[3])
-    f2 = c_sqr * (normal_direction[1] * u[3] + normal_direction[2] * u[4])
-    f3 = normal_direction[1] * u[2] - normal_direction[2] * u[1]
-    f4 = equations.c_h^2 * (normal_direction[1] * u[1] + normal_direction[2] * u[2])
 
     return SVector(f1, f2, f3, f4)
 end
@@ -70,22 +58,81 @@ end
     u_ll,
     u_rr,
     orientation::Integer,
-    equations::GLMMaxwellEquations2D,
+    equations::GlmMaxwellEquations2D,
 )
     c = equations.speed_of_light
-    c_h = equations.c_h
+    c_e = equations.c_e
     u_sum = u_ll + u_rr
     u_diff = u_ll - u_rr
     if orientation == 1
-        f1 = 0.5f0 * c * (c_h * u_diff[1] + c * u_sum[4])
+        f1 = 0.5f0 * c * c_e * (u_diff[1] + c * u_sum[4])
         f2 = 0.5f0 * c * (u_diff[2] + c * u_sum[3])
         f3 = 0.5f0 * (u_sum[2] + c * u_diff[3])
-        f4 = 0.5f0 * c_h * (c_h * u_sum[1] + c * u_diff[4])
+        f4 = 0.5f0 * c_e * (u_sum[1] + c * u_diff[4])
     else
         f1 = 0.5f0 * c * (u_diff[1] - c * u_sum[3])
-        f2 = 0.5f0 * c * (c_h * u_diff[2] + c * u_sum[4])
+        f2 = 0.5f0 * c * c_e * (u_diff[2] + c * u_sum[4])
         f3 = 0.5f0 * (c * u_diff[3] - u_sum[1])
-        f4 = 0.5f0 * c_h * (c_h * u_sum[2] + c * u_diff[4])
+        f4 = 0.5f0 * c_e * (u_sum[2] + c * u_diff[4])
+    end
+
+    return SVector(f1, f2, f3, f4)
+end
+
+#=
+@inline function flux(u, orientation::Integer, equations::GlmMaxwellEquations2D)
+    c_sqr = equations.speed_of_light^2
+
+    if orientation == 1
+        f1 = c_sqr * u[4]
+        f2 = c_sqr * u[3]
+        f3 = u[2]
+        f4 = equations.c_e^2 * u[1]
+    else
+        f1 = -c_sqr * u[3]
+        f2 = c_sqr * u[4]
+        f3 = -u[1]
+        f4 = equations.c_e^2 * u[2]
+    end
+
+    return SVector(f1, f2, f3, f4)
+end
+
+@inline function flux(
+    u,
+    normal_direction::AbstractVector,
+    equations::GlmMaxwellEquations2D,
+)
+    c_sqr = equations.speed_of_light^2
+
+    f1 = c_sqr * (normal_direction[1] * u[4] - normal_direction[2] * u[3])
+    f2 = c_sqr * (normal_direction[1] * u[3] + normal_direction[2] * u[4])
+    f3 = normal_direction[1] * u[2] - normal_direction[2] * u[1]
+    f4 = equations.c_e^2 * (normal_direction[1] * u[1] + normal_direction[2] * u[2])
+
+    return SVector(f1, f2, f3, f4)
+end
+
+@inline function flux_upwind(
+    u_ll,
+    u_rr,
+    orientation::Integer,
+    equations::GlmMaxwellEquations2D,
+)
+    c = equations.speed_of_light
+    c_e = equations.c_e
+    u_sum = u_ll + u_rr
+    u_diff = u_ll - u_rr
+    if orientation == 1
+        f1 = 0.5f0 * c * (c_e * u_diff[1] + c * u_sum[4])
+        f2 = 0.5f0 * c * (u_diff[2] + c * u_sum[3])
+        f3 = 0.5f0 * (u_sum[2] + c * u_diff[3])
+        f4 = 0.5f0 * c_e * (c_e * u_sum[1] + c * u_diff[4])
+    else
+        f1 = 0.5f0 * c * (u_diff[1] - c * u_sum[3])
+        f2 = 0.5f0 * c * (c_e * u_diff[2] + c * u_sum[4])
+        f3 = 0.5f0 * (c * u_diff[3] - u_sum[1])
+        f4 = 0.5f0 * c_e * (c_e * u_sum[2] + c * u_diff[4])
     end
 
     return SVector(f1, f2, f3, f4)
@@ -96,14 +143,14 @@ end
     u_ll,
     u_rr,
     normal_direction::AbstractVector,
-    equations::GLMMaxwellEquations2D,
+    equations::GlmMaxwellEquations2D,
 )
     c = equations.speed_of_light
-    c_h = equations.c_h
+    c_e = equations.c_e
     u_sum = u_ll + u_rr
     u_diff = u_ll - u_rr
     flux_component_1 =
-        c_h *
+        c_e *
         (normal_direction[1] * u_diff[1] + normal_direction[2] * u_diff[2]) +
         c * u_sum[4]
     flux_component_2 =
@@ -130,15 +177,16 @@ end
         )
     f4 =
         0.5f0 *
-        c_h *
+        c_e *
         (
-            c_h *
+            c_e *
             (normal_direction[1] * u_sum[1] + normal_direction[2] * u_sum[2]) +
             c * u_diff[4]
         )
 
     return SVector(f1, f2, f3, f4)
 end
+=#
 
 function boundary_condition_perfect_conducting_wall(
     u_inner,
@@ -147,11 +195,11 @@ function boundary_condition_perfect_conducting_wall(
     x,
     t,
     surface_flux_function,
-    equations::GLMMaxwellEquations2D,
+    equations::GlmMaxwellEquations2D,
 )
     psi_outer =
         2.0f0 *
-        equations.c_h *
+        equations.c_e *
         (normal_direction[1] * u_inner[1] + normal_direction[2] * u_inner[2]) / equations.speed_of_light
     if iseven(direction)
         return surface_flux_function(
@@ -170,11 +218,11 @@ function boundary_condition_perfect_conducting_wall(
     end
 end
 
-function initial_condition_free_stream(x, t, equations::GLMMaxwellEquations2D)
+function initial_condition_free_stream(x, t, equations::GlmMaxwellEquations2D)
     return SVector(10.0f0, 10.0f0, 10.0f0 / equations.speed_of_light, 10.0f0 / equations.speed_of_light)
 end
 
-function initial_condition_convergence_test(x, t, equations::GLMMaxwellEquations2D)
+function initial_condition_convergence_test(x, t, equations::GlmMaxwellEquations2D)
     c = equations.speed_of_light
     e1 = sin(x[2] + c * t)
     e2 = -sin(x[1] + c * t)
@@ -183,13 +231,13 @@ function initial_condition_convergence_test(x, t, equations::GLMMaxwellEquations
     return SVector(e1, e2, b, 0.0f0)
 end
 
-min_max_speed_naive(u_ll, u_rr, orientation, equations::GLMMaxwellEquations2D) =
-    max(1.0f0, equations.c_h) * (-equations.speed_of_light, equations.speed_of_light)
+min_max_speed_naive(u_ll, u_rr, orientation, equations::GlmMaxwellEquations2D) =
+    max(1.0f0, equations.c_e) * (-equations.speed_of_light, equations.speed_of_light)
 
-max_abs_speeds(u, equations::GLMMaxwellEquations2D) =
-    (max(1.0f0, equations.c_h) * equations.speed_of_light, max(1.0f0, equations.c_h) * equations.speed_of_light)
+max_abs_speeds(u, equations::GlmMaxwellEquations2D) =
+    (max(1.0f0, equations.c_e) * equations.speed_of_light, max(1.0f0, equations.c_e) * equations.speed_of_light)
 
-max_abs_speed_naive(u_ll, u_rr, orientation, equations::GLMMaxwellEquations2D) =
-    max(1.0f0, equations.c_h) * equations.speed_of_light
+max_abs_speed_naive(u_ll, u_rr, orientation, equations::GlmMaxwellEquations2D) =
+    max(1.0f0, equations.c_e) * equations.speed_of_light
 
 end # @muladd

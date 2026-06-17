@@ -4,20 +4,20 @@ using Trixi
 ###############################################################################
 # semidiscretization of the Maxwell equations
 
-function initial_condition_divergence_test(x, t, equations::GlmMaxwellEquations2D)
-    return SVector(0.0f0, 0.0f0, 0.0f0, 0.0f0)
+function initial_condition_constant(x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy2D)
+    return SVector(1.0, 0.2, -0.5, -10.0, 2.0, 3.0, 4.0/equations.c_sqr, 5.0/equations.c_sqr)
 end
 
-function source_term_function(u, x, t, equations::GlmMaxwellEquations2D)
-    return SVector(0.0, 0.0, 0.0, x[1])
-end
-
-equation = GlmMaxwellEquations2D(1.0, 299_792_458.0)
+volume_flux = Trixi.flux_energy_central
+surface_flux = Trixi.flux_energy_central
+equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy2D(1.4, 1.0, 1.0, 1e2, 1e-2, 1e0)
 mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), initial_refinement_level = 2, n_cells_max = 10^4)
-solver = DGSEM(3, Trixi.flux_upwind)
+basis = LobattoLegendreBasis(4)
+
+solver = DGSEM(basis, surface_flux)
+#solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_lax_friedrichs, volume_integral = VolumeIntegralFluxDifferencing(volume_flux))
 semi = SemidiscretizationHyperbolic(mesh, equation,
-                                    initial_condition_divergence_test, solver,
-                                    source_terms = source_term_function)
+                                    initial_condition_constant, solver)
 
 ###############################################################################
 # ODE solvers, callbacks etc.
@@ -26,8 +26,8 @@ analysis_interval = 100
 analysis_callback = AnalysisCallback(semi, interval = analysis_interval,
                                      save_analysis = true)
 
-cfl = 1.0
-tspan = (0.0, 1e-8)
+cfl = 0.5
+tspan = (0.0, 1.0)
 
 ode = semidiscretize(semi, tspan)
 summary_callback = SummaryCallback()

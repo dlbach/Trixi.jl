@@ -4,7 +4,7 @@ using Trixi
 ###############################################################################
 # semidiscretization of the Maxwell equations
 
-function initial_condition_linear_electric(x, t, equations::GLMMaxwellEquations2D)
+function initial_condition_linear_electric(x, t, equations::GlmMaxwellEquations2D)
     return SVector(x[1]*x[2], x[1]*x[2], 0.0, 0.0)
 end
 coordinates_min = (0.0, 0.0)
@@ -12,7 +12,7 @@ coordinates_max = (1.0, 1.0)
 refinement_patches = ((type = "box", coordinates_min = (0.0, 0.0),
                        coordinates_max = (0.5, 0.5)), )
 
-equation = GLMMaxwellEquations2D(299_792_458.0, 1.0)
+equation = GlmMaxwellEquations2D(299_792_458.0, 1.0)
 mesh = TreeMesh(coordinates_min, coordinates_max, initial_refinement_level = 1, n_cells_max = 10^4, refinement_patches = refinement_patches)
 solver = DGSEM(polydeg = 2, surface_flux = Trixi.flux_upwind)
 semi = SemidiscretizationHyperbolic(mesh, equation, initial_condition_linear_electric, solver)

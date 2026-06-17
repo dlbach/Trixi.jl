@@ -231,6 +231,13 @@ multiplication.
     end
 end
 
+@inline ln_ratio(x::Real, y::Real) = ln_ratio(promote(x, y)...)
+
+@inline function ln_ratio(x::RealT, y::RealT) where {RealT <: Real}
+   return 0.5f0 * (log(x) + log(y) + (x + y) / ln_mean(x, y))
+end
+
+
 # `Base.max` and `Base.min` perform additional checks for signed zeros and `NaN`s
 # which are not present in comparable functions in Fortran/C++. For example,
 # ```julia
