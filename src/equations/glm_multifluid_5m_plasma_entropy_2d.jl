@@ -104,7 +104,7 @@ end
     rho_v2 = rho * v2
     rho_s = rho * log(p / rho^gamma)
 
-    return SVector(rho, rho_v1, rho_v2, rho_e)
+    return SVector(rho, rho_v1, rho_v2, rho_s)
 end
 
 # Convert conservative variables to entropy variables
@@ -135,7 +135,7 @@ end
 # Convert entropy variables to conservative variables
 @inline function entropy2cons(w, equations::GlmMultiFluid5MomentPlasmaEquationsEntropy2D)
     cons_euler = SVector(ntuple(i -> entropy2cons_euler(w, i, equations), ncomponents(equations)))
-    cons_glm = equations.T_min * SVector(w[end-3]/equations.permittivity, w[end-2]/equations.permittivity, 
+    cons_glm = SVector(w[end-3]/equations.permittivity, w[end-2]/equations.permittivity, 
                                         w[end-1]*equations.permeability, w[end]*equations.permeability)
     return vcat(reduce(vcat, cons_euler), cons_glm)
 end
@@ -334,13 +334,13 @@ end
 end
 
 min_max_speed_naive(u_ll, u_rr, orientation, equations::GlmMultiFluid5MomentPlasmaEquationsEntropy2D) =
-    max(1.0f0, equations.c_e) * (-equations.speed_of_light, equations.speed_of_light)
+    max(1, equations.c_e) * (-equations.speed_of_light, equations.speed_of_light)
 
 max_abs_speeds(u, equations::GlmMultiFluid5MomentPlasmaEquationsEntropy2D) =
-    (max(1.0f0, equations.c_e) * equations.speed_of_light, max(1.0f0, equations.c_e) * equations.speed_of_light)
+    (max(1, equations.c_e) * equations.speed_of_light, max(1, equations.c_e) * equations.speed_of_light)
 
 max_abs_speed_naive(u_ll, u_rr, orientation, equations::GlmMultiFluid5MomentPlasmaEquationsEntropy2D) =
-    max(1.0f0, equations.c_e) * equations.speed_of_light
+    max(1, equations.c_e) * equations.speed_of_light
 
 
 function source_term_lorentz(u, x, t, equations::GlmMultiFluid5MomentPlasmaEquationsEntropy2D)
@@ -362,7 +362,7 @@ function source_term_lorentz_euler(prim, x, t, i, equations::GlmMultiFluid5Momen
     gas_constant = equations.gas_constants[i]
     T_min = equations.T_min
     rho, v1, v2, p = view(prim, (4*i-3):(4*i))
-    E1, E2, B, psi = prim[end-3], prim[end-2], prim[end-1], prim[end]
+    E1, E2, B = prim[end-3], prim[end-2], prim[end-1]
 
     s1 = 0
     s2 = charge_mass_ratio * rho * (E1 + v2 * B)

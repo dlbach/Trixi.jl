@@ -23,7 +23,7 @@ end
 
 
 equation = GlmMaxwellEquations2D(1e0, 1e1)
-mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), initial_refinement_level = 2, n_cells_max = 10^7)
+mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), periodicity = true, initial_refinement_level = 2, n_cells_max = 10^7)
 solver = DGSEM(3, Trixi.flux_lax_friedrichs)
 semi = SemidiscretizationHyperbolic(mesh, equation,
                                     initial_condition_convergence_2, solver, source_terms = source_terms_convergence)

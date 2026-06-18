@@ -250,7 +250,7 @@ function integrate_interfaces_via_indices(func::Func, u,
     # Initialize integral with zeros of the right shape
     integral = zero(eltype(u))
 
-    # Use quadrature to numerically integrate over entire domain
+    # Use quadrature to numerically integrate over all interfaces
     @batch reduction=(+, integral) for interface in eachinterface(dg, cache)
         element = interfaces.neighbor_ids[1, interface]
         jacobian = inv(cache.elements.inverse_jacobian[element])
@@ -259,7 +259,8 @@ function integrate_interfaces_via_indices(func::Func, u,
         end
     end
 
-    # Normalize with total volume
+    # Since we integrate a distribution-like value we normalize with the volume of the domain
+    # and not with the total area of the interfaces.
     if normalize
         integral = integral / total_volume(mesh)
     end
@@ -285,7 +286,8 @@ function integrate_mortars_via_indices(func::Func, u,
         end
     end
 
-    # Normalize with total volume
+    # Since we integrate a distribution-like value we normalize with the volume of the domain
+    # and not with the total area of the interfaces.
     if normalize
         integral = integral / total_volume(mesh)
     end

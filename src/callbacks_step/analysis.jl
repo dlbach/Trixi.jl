@@ -678,6 +678,9 @@ pretty_form_ascii(::Val{:l2_divb}) = "l2_divb"
 pretty_form_utf(::Val{:linf_divb}) = "L∞ ∇⋅B"
 pretty_form_ascii(::Val{:linf_divb}) = "linf_divb"
 
+pretty_form_utf(::Val{:l2_b_normal_jump}) = "L2 B⋅n jump"
+pretty_form_ascii(::Val{:l2_b_normal_jump}) = "l2_B_normal jump"
+
 pretty_form_utf(::Val{:l2_dive}) = "L2 ∇⋅E volume error"
 pretty_form_ascii(::Val{:l2_dive}) = "l2_dive volume error"
 

@@ -264,6 +264,63 @@ function integrate_via_indices(func::Func, u,
     return integral
 end
 
+function integrate_interfaces_via_indices(func::Func, u,
+                               mesh::TreeMesh{3}, equations, dg::DGSEM, cache,
+                               args...; normalize = true) where {Func}
+    @unpack weights = dg.basis
+    @unpack interfaces = cache
+
+    # Initialize integral with zeros of the right shape
+    integral = zero(eltype(u))
+
+    # Use quadrature to numerically integrate over all interfaces
+    @batch reduction=(+, integral) for interface in eachinterface(dg, cache)
+        element = interfaces.neighbor_ids[1, interface]
+        jacobian = inv(cache.elements.inverse_jacobian[element])^2
+        for i in eachnode(dg)
+            for j in eachnode(dg)
+                integral += jacobian * weights[i] * weights[j] * func(u, i, j, interface, equations, dg, cache, args...)
+            end
+        end
+    end
+
+    # Since we integrate a distribution-like value we normalize with the volume of the domain
+    # and not with the total area of the interfaces.
+    if normalize
+        integral = integral / total_volume(mesh)
+    end
+
+    return integral
+end
+
+function integrate_mortars_via_indices(func::Func, u,
+                               mesh::TreeMesh{3}, equations, dg::DGSEM, cache,
+                               args...; normalize = true) where {Func}
+    @unpack weights = dg.basis
+    @unpack interfaces = cache
+
+    # Initialize integral with zeros of the right shape
+    integral = zero(eltype(u))
+
+    @batch reduction=(+, integral) for mortar in eachmortar(dg, cache)
+        lower_element = cache.mortars.neighbor_ids[1, mortar]
+        jacobian = inv(cache.elements.inverse_jacobian[lower_element])^2
+        for i in eachnode(dg)
+            for j in eachnode(dg)
+                integral += jacobian * weights[i] * weights[j] *
+                            func(u, i, j, mortar, equations, dg, cache, args...)
+            end
+        end
+    end
+
+    # Normalize with total volume
+    if normalize
+        integral = integral / total_volume(mesh)
+    end
+
+    return integral
+end
+
 function integrate(func::Func, u,
                    mesh::Union{TreeMesh{3}, StructuredMesh{3}, P4estMesh{3},
                                T8codeMesh{3}},
@@ -312,10 +369,10 @@ function analyze(::Val{:l2_dive}, du, u, t,
                  source_terms, mesh::TreeMesh{3},
                  equations, dg::DGSEM, cache)
     integrate_via_indices(u, mesh, equations, dg, cache, cache,
-                          dg.basis.derivative_matrix) do u, i, j, element, equations,
+                          dg.basis.derivative_matrix) do u, i, j, k, element, equations,
                                                          dg, cache, derivative_matrix
         dive = zero(eltype(u))
-        for k in eachnode(dg)
+        for l in eachnode(dg)
             u_ljk = get_node_vars(u, equations, dg, l, j, k, element)
             u_ilk = get_node_vars(u, equations, dg, i, l, k, element)
             u_ijl = get_node_vars(u, equations, dg, i, j, l, element)
@@ -338,20 +395,14 @@ end
 
 function analyze(::Val{:l2_dive}, du, u, t,
                  source_terms,
-                 mesh::Union{StructuredMesh{2}, UnstructuredMesh2D, P4estMesh{2},
-                             T8codeMesh{2}},
+                 mesh::Union{StructuredMesh{3}, UnstructuredMesh2D, P4estMesh{3},
+                             T8codeMesh{3}},
                  equations, dg::DGSEM, cache)
     @unpack contravariant_vectors = cache.elements
     integrate_via_indices(u, mesh, equations, dg, cache, cache,
                           dg.basis.derivative_matrix) do u, i, j, element, equations,
                                                          dg, cache, derivative_matrix
         dive = zero(eltype(u))
-        # Get the contravariant vectors Ja^1 and Ja^2
-        Ja11, Ja12 = get_contravariant_vector(1, contravariant_vectors, i, j, element)
-        Ja21, Ja22 = get_contravariant_vector(2, contravariant_vectors, i, j, element)
-        # Compute the transformed divergence
-
-        divb = zero(eltype(u))
         # Get the contravariant vectors Ja^1, Ja^2, and Ja^3
         Ja11, Ja12, Ja13 = get_contravariant_vector(1, contravariant_vectors,
                                                     i, j, k, element)
@@ -385,11 +436,10 @@ function analyze(::Val{:l2_dive}, du, u, t,
     end |> sqrt
 end
 
-
 function analyze(::Val{:l2_e_normal_jump}, du, u, t,
                  mesh::TreeMesh{3},
                  equations, dg::DGSEM, cache)
-    a = integrate_interfaces_via_indices(u, mesh, equations, dg, cache, cache) do u, i, j, interface, equations, dg, cache                                                
+    a = integrate_interfaces_via_indices(u, mesh, equations, dg, cache) do u, i, j, interface, equations, dg, cache                                                
         @unpack u, orientations = cache.interfaces
         normal_jump = zero(eltype(u))
         u_ll, u_rr = get_surface_node_vars(u, equations, dg, i, j, interface)
@@ -397,7 +447,7 @@ function analyze(::Val{:l2_e_normal_jump}, du, u, t,
             E1_ll, _, _ = electric_field(u_ll, equations)
             E1_rr, _, _ = electric_field(u_rr, equations)
             normal_jump += (E1_ll - E1_rr)^2
-        elseif orientations[interface] == 1
+        elseif orientations[interface] == 2
             _, E2_ll, _ = electric_field(u_ll, equations)
             _, E2_rr, _ = electric_field(u_rr, equations)
             normal_jump += (E2_ll - E2_rr)^2
@@ -408,31 +458,51 @@ function analyze(::Val{:l2_e_normal_jump}, du, u, t,
         end
     end
 
-    b = integrate_mortars_via_indices(u, mesh, equations, dg, cache, cache) do u, i, j, mortar, equations, dg, cache                                                        
-        @unpack u_upper, u_lower, orientations = cache.mortars
+    b = integrate_mortars_via_indices(u, mesh, equations, dg, cache) do u, i, j, mortar, equations, dg, cache                                                        
+        @unpack u_upper_left, u_upper_right, u_lower_left, u_lower_right, orientations = cache.mortars
         normal_jump = zero(eltype(u))
-        u_upper_ll, u_upper_rr = get_surface_node_vars(u_upper, equations, dg,
+        u_ul_ll, u_ul_rr = get_surface_node_vars(u_upper_left, equations, dg,
                                                         i, j, mortar)
-        u_lower_ll, u_lower_rr = get_surface_node_vars(u_lower, equations, dg,
+        u_ur_ll, u_ur_rr = get_surface_node_vars(u_upper_right, equations, dg,
                                                         i, j, mortar)
+        u_ll_ll, u_ll_rr = get_surface_node_vars(u_lower_left, equations, dg,
+                                                        i, j, mortar)
+        u_lr_ll, u_lr_rr = get_surface_node_vars(u_lower_right, equations, dg,
+                                                        i, j, mortar)   
+
         if orientations[mortar] == 1
-            E1u_ll, _, _ = electric_field(u_upper_ll, equations)
-            E1u_rr, _, _ = electric_field(u_upper_rr, equations)
-            E1l_ll, _, _ = electric_field(u_lower_ll, equations)
-            E1l_rr, _, _ = electric_field(u_lower_rr, equations)
-            normal_jump += (E1u_ll - E1u_rr)^2 + (E1l_ll - E1l_rr)^2
+            E1_ul_ll, _, _ = electric_field(u_ul_ll, equations)
+            E1_ul_rr, _, _ = electric_field(u_ul_rr, equations)
+            E1_ur_ll, _, _ = electric_field(u_ur_ll, equations)
+            E1_ur_rr, _, _ = electric_field(u_ur_rr, equations)
+            E1_ll_ll, _, _ = electric_field(u_ll_ll, equations)
+            E1_ll_rr, _, _ = electric_field(u_ll_rr, equations)
+            E1_lr_ll, _, _ = electric_field(u_lr_ll, equations)
+            E1_lr_rr, _, _ = electric_field(u_lr_rr, equations)
+            normal_jump += (E1_ul_ll - E1_ul_rr)^2 + (E1_ur_ll - E1_ur_rr)^2 +
+                           (E1_ll_ll - E1_ll_rr)^2 + (E1_lr_ll - E1_lr_rr)^2
         elseif orientations[mortar] == 2
-            _, E2u_ll, _ = electric_field(u_upper_ll, equations)
-            _, E2u_rr, _ = electric_field(u_upper_rr, equations)
-            _, E2l_ll, _ = electric_field(u_lower_ll, equations)
-            _, E2l_rr, _ = electric_field(u_lower_rr, equations)
-            normal_jump += (E2u_ll - E2u_rr)^2 + (E2l_ll - E2l_rr)^2
+            _, E2_ul_ll, _ = electric_field(u_ul_ll, equations)
+            _, E2_ul_rr, _ = electric_field(u_ul_rr, equations)
+            _, E2_ur_ll, _ = electric_field(u_ur_ll, equations)
+            _, E2_ur_rr, _ = electric_field(u_ur_rr, equations)
+            _, E2_ll_ll, _ = electric_field(u_ll_ll, equations)
+            _, E2_ll_rr, _ = electric_field(u_ll_rr, equations)
+            _, E2_lr_ll, _ = electric_field(u_lr_ll, equations)
+            _, E2_lr_rr, _ = electric_field(u_lr_rr, equations)
+            normal_jump += (E2_ul_ll - E2_ul_rr)^2 + (E2_ur_ll - E2_ur_rr)^2 +
+                           (E2_ll_ll - E2_ll_rr)^2 + (E2_lr_ll - E2_lr_rr)^2
         else
-            _, _, E3u_ll = electric_field(u_upper_ll, equations)
-            _, _, E3u_rr = electric_field(u_upper_rr, equations)
-            _, _, E3l_ll = electric_field(u_lower_ll, equations)
-            _, _, E3l_rr = electric_field(u_lower_rr, equations)
-            normal_jump += (E3u_ll - E3u_rr)^2 + (E3l_ll - E3l_rr)^2
+            _, _, E3_ul_ll = electric_field(u_ul_ll, equations)
+            _, _, E3_ul_rr = electric_field(u_ul_rr, equations)
+            _, _, E3_ur_ll = electric_field(u_ur_ll, equations)
+            _, _, E3_ur_rr = electric_field(u_ur_rr, equations)
+            _, _, E3_ll_ll = electric_field(u_ll_ll, equations)
+            _, _, E3_ll_rr = electric_field(u_ll_rr, equations)
+            _, _, E3_lr_ll = electric_field(u_lr_ll, equations)
+            _, _, E3_lr_rr = electric_field(u_lr_rr, equations)
+            normal_jump += (E3_ul_ll - E3_ul_rr)^2 + (E3_ur_ll - E3_ur_rr)^2 +
+                           (E3_ll_ll - E3_ll_rr)^2 + (E3_lr_ll - E3_lr_rr)^2
         end
     end
 
@@ -586,4 +656,78 @@ function analyze(::Val{:linf_divb}, du, u, t,
 
     return linf_divb
 end
+
+function analyze(::Val{:l2_b_normal_jump}, du, u, t,
+                 mesh::TreeMesh{3},
+                 equations, dg::DGSEM, cache)
+    a = integrate_interfaces_via_indices(u, mesh, equations, dg, cache) do u, i, j, interface, equations, dg, cache                                                
+        @unpack u, orientations = cache.interfaces
+        normal_jump = zero(eltype(u))
+        u_ll, u_rr = get_surface_node_vars(u, equations, dg, i, j, interface)
+        if orientations[interface] == 1
+            B1_ll, _, _ = magnetic_field(u_ll, equations)
+            B1_rr, _, _ = magnetic_field(u_rr, equations)
+            normal_jump += (B1_ll - B1_rr)^2
+        elseif orientations[interface] == 2
+            _, B2_ll, _ = magnetic_field(u_ll, equations)
+            _, B2_rr, _ = magnetic_field(u_rr, equations)
+            normal_jump += (B2_ll - B2_rr)^2
+        else
+            _, _, B3_ll = magnetic_field(u_ll, equations)
+            _, _, B3_rr = magnetic_field(u_rr, equations)
+            normal_jump += (B3_ll - B3_rr)^2
+        end
+    end
+
+    b = integrate_mortars_via_indices(u, mesh, equations, dg, cache) do u, i, j, mortar, equations, dg, cache                                                        
+        @unpack u_upper_left, u_upper_right, u_lower_left, u_lower_right, orientations = cache.mortars
+        normal_jump = zero(eltype(u))
+        u_ul_ll, u_ul_rr = get_surface_node_vars(u_upper_left, equations, dg,
+                                                        i, j, mortar)
+        u_ur_ll, u_ur_rr = get_surface_node_vars(u_upper_right, equations, dg,
+                                                        i, j, mortar)
+        u_ll_ll, u_ll_rr = get_surface_node_vars(u_lower_left, equations, dg,
+                                                        i, j, mortar)
+        u_lr_ll, u_lr_rr = get_surface_node_vars(u_lower_right, equations, dg,
+                                                        i, j, mortar)   
+
+        if orientations[mortar] == 1
+            B1_ul_ll, _, _ = magnetic_field(u_ul_ll, equations)
+            B1_ul_rr, _, _ = magnetic_field(u_ul_rr, equations)
+            B1_ur_ll, _, _ = magnetic_field(u_ur_ll, equations)
+            B1_ur_rr, _, _ = magnetic_field(u_ur_rr, equations)
+            B1_ll_ll, _, _ = magnetic_field(u_ll_ll, equations)
+            B1_ll_rr, _, _ = magnetic_field(u_ll_rr, equations)
+            B1_lr_ll, _, _ = magnetic_field(u_lr_ll, equations)
+            B1_lr_rr, _, _ = magnetic_field(u_lr_rr, equations)
+            normal_jump += (B1_ul_ll - B1_ul_rr)^2 + (B1_ur_ll - B1_ur_rr)^2 +
+                           (B1_ll_ll - B1_ll_rr)^2 + (B1_lr_ll - B1_lr_rr)^2
+        elseif orientations[mortar] == 2
+            _, B2_ul_ll, _ = magnetic_field(u_ul_ll, equations)
+            _, B2_ul_rr, _ = magnetic_field(u_ul_rr, equations)
+            _, B2_ur_ll, _ = magnetic_field(u_ur_ll, equations)
+            _, B2_ur_rr, _ = magnetic_field(u_ur_rr, equations)
+            _, B2_ll_ll, _ = magnetic_field(u_ll_ll, equations)
+            _, B2_ll_rr, _ = magnetic_field(u_ll_rr, equations)
+            _, B2_lr_ll, _ = magnetic_field(u_lr_ll, equations)
+            _, B2_lr_rr, _ = magnetic_field(u_lr_rr, equations)
+            normal_jump += (B2_ul_ll - B2_ul_rr)^2 + (B2_ur_ll - B2_ur_rr)^2 +
+                           (B2_ll_ll - B2_ll_rr)^2 + (B2_lr_ll - B2_lr_rr)^2
+        else
+            _, _, B3_ul_ll = magnetic_field(u_ul_ll, equations)
+            _, _, B3_ul_rr = magnetic_field(u_ul_rr, equations)
+            _, _, B3_ur_ll = magnetic_field(u_ur_ll, equations)
+            _, _, B3_ur_rr = magnetic_field(u_ur_rr, equations)
+            _, _, B3_ll_ll = magnetic_field(u_ll_ll, equations)
+            _, _, B3_ll_rr = magnetic_field(u_ll_rr, equations)
+            _, _, B3_lr_ll = magnetic_field(u_lr_ll, equations)
+            _, _, B3_lr_rr = magnetic_field(u_lr_rr, equations)
+            normal_jump += (B3_ul_ll - B3_ul_rr)^2 + (B3_ur_ll - B3_ur_rr)^2 +
+                           (B3_ll_ll - B3_ll_rr)^2 + (B3_lr_ll - B3_lr_rr)^2
+        end
+    end
+
+    return sqrt(a + b)
+end
+
 end # @muladd

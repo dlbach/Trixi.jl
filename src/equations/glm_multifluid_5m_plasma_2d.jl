@@ -352,23 +352,44 @@ end
 end
 
 min_max_speed_naive(u_ll, u_rr, orientation, equations::GlmMultiFluid5MomentPlasmaEquations2D) =
-    max(1.0f0, equations.c_e) * (-equations.speed_of_light, equations.speed_of_light)
+    max(1, equations.c_e) * (-equations.speed_of_light, equations.speed_of_light)
 
 max_abs_speeds(u, equations::GlmMultiFluid5MomentPlasmaEquations2D) =
-    (max(1.0f0, equations.c_e) * equations.speed_of_light, max(1.0f0, equations.c_e) * equations.speed_of_light)
+    (max(1, equations.c_e) * equations.speed_of_light, max(1, equations.c_e) * equations.speed_of_light)
 
 max_abs_speed_naive(u_ll, u_rr, orientation, equations::GlmMultiFluid5MomentPlasmaEquations2D) =
-    max(1.0f0, equations.c_e) * equations.speed_of_light
+    max(1, equations.c_e) * equations.speed_of_light
 
 
-function source_term_lorentz_corrected(u, x, t, equations::GlmMultiFluid5MomentPlasmaEquations2D)
+function source_term_lorentz(u, x, t, equations::GlmMultiFluid5MomentPlasmaEquations2D)
     prim = cons2prim(u, equations)
     sources_euler = ntuple(i -> source_term_lorentz_euler(prim, x, t, i, equations), ncomponents(equations))
     sources_glm = source_term_lorentz_glm(u, x, t, equations)
     return vcat(sources_euler..., sources_glm)
 end
 
+function source_term_lorentz_corrected(u, x, t, equations::GlmMultiFluid5MomentPlasmaEquations2D)
+    prim = cons2prim(u, equations)
+    sources_euler = ntuple(i -> source_term_lorentz_euler_corrected(prim, x, t, i, equations), ncomponents(equations))
+    sources_glm = source_term_lorentz_glm(u, x, t, equations)
+    return vcat(sources_euler..., sources_glm)
+end
+
 function source_term_lorentz_euler(prim, x, t, i, equations::GlmMultiFluid5MomentPlasmaEquations2D)
+    charge_mass_ratio = equations.charge_mass_ratios[i]
+    gas_constant = equations.gas_constants[i]
+    T_min = equations.T_min
+    rho, v1, v2, p = view(prim, (4*i-3):(4*i))
+    E1, E2, B, psi = prim[end-3], prim[end-2], prim[end-1], prim[end]
+
+    s1 = 0
+    s2 = charge_mass_ratio * rho * (E1 + B * v2)
+    s3 = charge_mass_ratio * rho * (E2 - B * v1)
+    s4 = charge_mass_ratio * rho * (v1 * E1 + v2 * E2)
+    return SVector(s1, s2, s3, s4)
+end
+
+function source_term_lorentz_euler_corrected(prim, x, t, i, equations::GlmMultiFluid5MomentPlasmaEquations2D)
     charge_mass_ratio = equations.charge_mass_ratios[i]
     gas_constant = equations.gas_constants[i]
     T_min = equations.T_min

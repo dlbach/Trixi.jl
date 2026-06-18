@@ -11,7 +11,7 @@ end
 volume_flux = Trixi.flux_energy_central
 surface_flux = Trixi.flux_energy_central
 equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy2D((1.6, 1.6), (1.0, 1.0), (1.0, -1.0), 1e2, 1e-2, 1e0)
-mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), initial_refinement_level = 2, n_cells_max = 10^4)
+mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), periodicity = true,  initial_refinement_level = 2, n_cells_max = 10^4)
 basis = LobattoLegendreBasis(4)
 
 indicator_sc = IndicatorHennemannGassner(equation, basis,

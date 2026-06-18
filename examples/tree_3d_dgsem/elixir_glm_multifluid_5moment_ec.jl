@@ -4,20 +4,20 @@ using Trixi
 ###############################################################################
 # semidiscretization of the Maxwell equations
 
-@inline function initial_condition_ec(x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquations2D)
-    u = SVector(5.0, 0.0, 0.0, 40.0, 5.0, 0.0, 0.0, 40.0, 0.0, 0.0, 0.0, 0.0)
-    v = rand(12) .- 0.5
+@inline function initial_condition_ec(x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquations3D)
+    u = SVector(5.0, 0.0, 0.0, 0.0, 40.0, 5.0, 0.0, 0.0, 0.0, 40.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    v = rand(18) .- 0.5
     #v[7] /= equations.speed_of_light
     #v[8] /= equations.speed_of_light
-    v = SVector{12, Float64}(v)
+    v = SVector{18, Float64}(v)
     return u + v
 end
 
 volume_flux = Trixi.flux_ranocha_central
 surface_flux = Trixi.flux_ranocha_central
-equation = Trixi.GlmMultiFluid5MomentPlasmaEquations2D((1.6, 1.6), (1.0, 1.0), (1.0, -1.0), 1e2, 1e-2, 1e0)
-mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), periodicity = true, initial_refinement_level = 2, n_cells_max = 10^4)
-basis = LobattoLegendreBasis(2)
+equation = Trixi.GlmMultiFluid5MomentPlasmaEquations3D((1.6, 1.6), (1.0, 1.0), (1.0, -1.0), 1e2, 1e-2, 1e0)
+mesh = TreeMesh((-1.0, -1.0, -1.0), (1.0, 1.0, 1.0), periodicity = true, initial_refinement_level = 2, n_cells_max = 10^4)
+basis = LobattoLegendreBasis(3)
 
 indicator_sc = IndicatorHennemannGassner(equation, basis,
                                          alpha_max = 0.5,
@@ -28,7 +28,7 @@ volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
                                                  volume_flux_dg = volume_flux,
                                                  volume_flux_fv = surface_flux)
 
-solver = DGSEM(basis, surface_flux, volume_integral)
+solver = DGSEM(basis, surface_flux, VolumeIntegralFluxDifferencing(volume_flux))
 semi = SemidiscretizationHyperbolic(mesh, equation,
                                     initial_condition_ec, solver, source_terms = Trixi.source_term_lorentz_corrected)
 
