@@ -79,65 +79,20 @@ end
     return SVector(f1, f2, f3, f4)
 end
 
-#=
-@inline function flux(u, orientation::Integer, equations::GlmMaxwellEquations2D)
-    c_sqr = equations.speed_of_light^2
-
-    if orientation == 1
-        f1 = c_sqr * u[4]
-        f2 = c_sqr * u[3]
-        f3 = u[2]
-        f4 = equations.c_e^2 * u[1]
-    else
-        f1 = -c_sqr * u[3]
-        f2 = c_sqr * u[4]
-        f3 = -u[1]
-        f4 = equations.c_e^2 * u[2]
-    end
-
-    return SVector(f1, f2, f3, f4)
-end
-
-@inline function flux(
+@inline function flux_glm_maxwell(
     u,
     normal_direction::AbstractVector,
     equations::GlmMaxwellEquations2D,
 )
     c_sqr = equations.speed_of_light^2
 
-    f1 = c_sqr * (normal_direction[1] * u[4] - normal_direction[2] * u[3])
-    f2 = c_sqr * (normal_direction[1] * u[3] + normal_direction[2] * u[4])
-    f3 = normal_direction[1] * u[2] - normal_direction[2] * u[1]
-    f4 = equations.c_e^2 * (normal_direction[1] * u[1] + normal_direction[2] * u[2])
+    f1 = c_sqr * (equations.c_e * normal_direction[1] * u[end] - normal_direction[2] * u[end-1])
+    f2 = c_sqr * (normal_direction[1] * u[end-1] + equations.c_e * normal_direction[2] * u[end])
+    f3 = normal_direction[1] * u[end-2] - normal_direction[2] * u[end-3]
+    f4 = equations.c_e * (normal_direction[1] * u[end-3] + normal_direction[2] * u[end-2])
 
     return SVector(f1, f2, f3, f4)
 end
-
-@inline function flux_upwind(
-    u_ll,
-    u_rr,
-    orientation::Integer,
-    equations::GlmMaxwellEquations2D,
-)
-    c = equations.speed_of_light
-    c_e = equations.c_e
-    u_sum = u_ll + u_rr
-    u_diff = u_ll - u_rr
-    if orientation == 1
-        f1 = 0.5f0 * c * (c_e * u_diff[1] + c * u_sum[4])
-        f2 = 0.5f0 * c * (u_diff[2] + c * u_sum[3])
-        f3 = 0.5f0 * (u_sum[2] + c * u_diff[3])
-        f4 = 0.5f0 * c_e * (c_e * u_sum[1] + c * u_diff[4])
-    else
-        f1 = 0.5f0 * c * (u_diff[1] - c * u_sum[3])
-        f2 = 0.5f0 * c * (c_e * u_diff[2] + c * u_sum[4])
-        f3 = 0.5f0 * (c * u_diff[3] - u_sum[1])
-        f4 = 0.5f0 * c_e * (c_e * u_sum[2] + c * u_diff[4])
-    end
-
-    return SVector(f1, f2, f3, f4)
-end
-
 
 @inline function flux_upwind(
     u_ll,
@@ -186,7 +141,6 @@ end
 
     return SVector(f1, f2, f3, f4)
 end
-=#
 
 function boundary_condition_perfect_conducting_wall(
     u_inner,
@@ -231,13 +185,13 @@ function initial_condition_convergence_test(x, t, equations::GlmMaxwellEquations
     return SVector(e1, e2, b, 0.0f0)
 end
 
-min_max_speed_naive(u_ll, u_rr, orientation, equations::GlmMaxwellEquations2D) =
+min_max_speed_naive(u_ll, u_rr, orientation_or_normal_direction, equations::GlmMaxwellEquations2D) =
     max(1.0f0, equations.c_e) * (-equations.speed_of_light, equations.speed_of_light)
 
 max_abs_speeds(u, equations::GlmMaxwellEquations2D) =
     (max(1.0f0, equations.c_e) * equations.speed_of_light, max(1.0f0, equations.c_e) * equations.speed_of_light)
 
-max_abs_speed_naive(u_ll, u_rr, orientation, equations::GlmMaxwellEquations2D) =
+max_abs_speed_naive(u_ll, u_rr, orientation_or_normal_direction, equations::GlmMaxwellEquations2D) =
     max(1.0f0, equations.c_e) * equations.speed_of_light
 
 end # @muladd

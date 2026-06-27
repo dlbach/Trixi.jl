@@ -14,10 +14,17 @@ using Trixi
     return u + v
 end
 
-volume_flux = Trixi.flux_energy_central
-surface_flux = Trixi.flux_energy_upwind
+volume_flux = Trixi.flux_energy_upwind
+surface_flux = Trixi.flux_energy_central
 equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy3D((1.6, 1.6), (1.0, 1.0), (1.0, -1.0), 1e2, 1e-2, 1e0)
-mesh = TreeMesh((-1.0, -1.0, -1.0), (1.0, 1.0, 1.0), periodicity = true, initial_refinement_level = 2, n_cells_max = 10^4)
+coordinates_min = (-1.0, -1.0, -1.0)
+coordinates_max = (1.0, 1.0, 1.0)
+
+trees_per_dimension = (2, 2, 2)
+
+mesh = P4estMesh(trees_per_dimension, polydeg = 2,
+                 coordinates_min = coordinates_min, coordinates_max = coordinates_max,
+                 periodicity = true, initial_refinement_level = 2)
 basis = LobattoLegendreBasis(2)
 
 indicator_sc = IndicatorHennemannGassner(equation, basis,
@@ -29,9 +36,9 @@ volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
                                                  volume_flux_dg = volume_flux,
                                                  volume_flux_fv = surface_flux)
 
-solver = DGSEM(basis, surface_flux, volume_integral)
+solver = DGSEM(basis, surface_flux, VolumeIntegralFluxDifferencing(volume_flux))
 semi = SemidiscretizationHyperbolic(mesh, equation,
-                                    initial_condition_ec, solver, source_terms = Trixi.source_term_lorentz_corrected)
+                                    initial_condition_ec, solver, source_terms = Trixi.source_term_lorentz_corrected_2)
 
 ###############################################################################
 # ODE solvers, callbacks etc.

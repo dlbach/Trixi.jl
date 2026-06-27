@@ -714,6 +714,7 @@ abstract type AbstractGlmMultiFluid5MomentPlasmaEquationsEntropy{NDIMS, NVARS, N
               AbstractEquations{NDIMS, NVARS} end
 include("glm_multifluid_5m_plasma_entropy_2d.jl")
 include("glm_multifluid_5m_plasma_entropy_3d.jl")
+include("glm_multifluid_5m_plasma_entropy_pseudo3d.jl")
 
 # Retrieve number of components from equation instance for the multicomponent case
 @inline function ncomponents(::AbstractIdealGlmMhdMulticomponentEquations{NDIMS, NVARS,

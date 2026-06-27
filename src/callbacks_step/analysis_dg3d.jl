@@ -400,7 +400,7 @@ function analyze(::Val{:l2_dive}, du, u, t,
                  equations, dg::DGSEM, cache)
     @unpack contravariant_vectors = cache.elements
     integrate_via_indices(u, mesh, equations, dg, cache, cache,
-                          dg.basis.derivative_matrix) do u, i, j, element, equations,
+                          dg.basis.derivative_matrix) do u, i, j, k, element, equations,
                                                          dg, cache, derivative_matrix
         dive = zero(eltype(u))
         # Get the contravariant vectors Ja^1, Ja^2, and Ja^3
@@ -416,9 +416,9 @@ function analyze(::Val{:l2_dive}, du, u, t,
             u_ilk = get_node_vars(u, equations, dg, i, l, k, element)
             u_ijl = get_node_vars(u, equations, dg, i, j, l, element)
 
-            E_ljk = magnetic_field(u_ljk, equations)
-            E_ilk = magnetic_field(u_ilk, equations)
-            E_ijl = magnetic_field(u_ijl, equations)
+            E_ljk = electric_field(u_ljk, equations)
+            E_ilk = electric_field(u_ilk, equations)
+            E_ijl = electric_field(u_ijl, equations)
 
             dive += (derivative_matrix[i, l] *
                      (Ja11 * E_ljk[1] + Ja12 * E_ljk[2] + Ja13 * E_ljk[3]) +

@@ -80,11 +80,11 @@ end
 end
 
 @inline function cons2prim_euler(u, i, equations::GlmMultiFluid5MomentPlasmaEquations2D)
-    rho, rho_v1, rho_v2, rho_e = view(u, (4*i-3):(4*i))
+    rho, rho_v1, rho_v2, rho_e_total = view(u, (4*i-3):(4*i))
 
     v1 = rho_v1 / rho
     v2 = rho_v2 / rho
-    p = (equations.gammas[i] - 1) * (rho_e - 0.5f0 * (rho_v1 * v1 + rho_v2 * v2))
+    p = (equations.gammas[i] - 1) * (rho_e_total - 0.5f0 * (rho_v1 * v1 + rho_v2 * v2))
 
     return SVector(rho, v1, v2, p)
 end
@@ -100,8 +100,8 @@ end
     rho, v1, v2, p = view(prim, (4*i-3):(4*i))
     rho_v1 = rho * v1
     rho_v2 = rho * v2
-    rho_e = p * equations.inv_gammas_minus_one[i] + 0.5f0 * (rho_v1 * v1 + rho_v2 * v2)
-    return SVector(rho, rho_v1, rho_v2, rho_e)
+    rho_e_total = p * equations.inv_gammas_minus_one[i] + 0.5f0 * (rho_v1 * v1 + rho_v2 * v2)
+    return SVector(rho, rho_v1, rho_v2, rho_e_total)
 end
 
 # Convert conservative variables to entropy variables
@@ -113,13 +113,13 @@ end
 end
 
 @inline function cons2entropy_euler(u, i, equations::GlmMultiFluid5MomentPlasmaEquations2D)
-    rho, rho_v1, rho_v2, rho_e = view(u, (4*i-3):(4*i))
+    rho, rho_v1, rho_v2, rho_e_total = view(u, (4*i-3):(4*i))
     gas_constant = equations.gas_constants[i]
 
     v1 = rho_v1 / rho
     v2 = rho_v2 / rho
     v_square = v1^2 + v2^2
-    p = (equations.gammas[i] - 1) * (rho_e - 0.5f0 * rho * v_square)
+    p = (equations.gammas[i] - 1) * (rho_e_total - 0.5f0 * rho * v_square)
     s = log(p) - equations.gammas[i] * log(rho)
     rho_p = rho / p
 
@@ -161,12 +161,12 @@ end
     rho = -p * V5
     rho_v1 = p * V2
     rho_v2 = p * V3
-    rho_e = p * (inv_gamma_minus_one - (V2^2 + V3^2) / (2 * V5))
-    return SVector(rho, rho_v1, rho_v2, rho_e)
+    rho_e_total = p * (inv_gamma_minus_one - (V2^2 + V3^2) / (2 * V5))
+    return SVector(rho, rho_v1, rho_v2, rho_e_total)
 end
 
 function default_analysis_integrals(::GlmMultiFluid5MomentPlasmaEquations2D)
-    (Val(:l2_dive), Val(:l2_e_normal_jump), entropy_timederivative)
+    (Val(:l2_dive), entropy_timederivative) #(Val(:l2_dive), Val(:l2_e_normal_jump), entropy_timederivative)
 end
 
 @inline electric_field(u, equations::GlmMultiFluid5MomentPlasmaEquations2D) = SVector(u[end-3], u[end-2])
@@ -196,29 +196,49 @@ end
 end
 
 
-@inline function flux(u, orientation::Integer, equations::GlmMultiFluid5MomentPlasmaEquations2D)
-    fluxes_euler = ntuple(i -> flux_euler(u, orientation, i, equations), ncomponents(equations))
-    flux_glm = flux_glm_maxwell(u, orientation, equations)
+@inline function flux(u, orientation_or_normal_direction, equations::GlmMultiFluid5MomentPlasmaEquations2D)
+    fluxes_euler = ntuple(i -> flux_euler(u, orientation_or_normal_direction, i, equations), ncomponents(equations))
+    flux_glm = flux_glm_maxwell(u, orientation_or_normal_direction, equations)
     return vcat(fluxes_euler..., flux_glm)
 end
 
+
 # Calculates the Euler flux for a single species at a single point
 @inline function flux_euler(u, orientation::Integer, i::Integer, equations::GlmMultiFluid5MomentPlasmaEquations2D)
-    rho, rho_v1, rho_v2, rho_e = view(u, (4*i-3):(4*i))
+    rho, rho_v1, rho_v2, rho_e_total = view(u, (4*i-3):(4*i))
     v1 = rho_v1 / rho
     v2 = rho_v2 / rho
-    p = (equations.gammas[i] - 1) * (rho_e - 0.5f0 * (rho_v1 * v1 + rho_v2 * v2))
+    p = (equations.gammas[i] - 1) * (rho_e_total - 0.5f0 * (rho_v1 * v1 + rho_v2 * v2))
     if orientation == 1
         f1 = rho_v1
         f2 = rho_v1 * v1 + p
         f3 = rho_v1 * v2
-        f4 = (rho_e + p) * v1
+        f4 = (rho_e_total + p) * v1
     else
         f1 = rho_v2
         f2 = rho_v2 * v1
         f3 = rho_v2 * v2 + p
-        f4 = (rho_e + p) * v2
+        f4 = (rho_e_total + p) * v2
     end
+    return SVector(f1, f2, f3, f4)
+end
+
+# Calculate 1D flux for a single point in the normal direction
+# Note, this directional vector is not normalized
+@inline function flux_euler(u, normal_direction::AbstractVector, i::Integer, equations::GlmMultiFluid5MomentPlasmaEquations2D)
+    rho, rho_v1, rho_v2, rho_e_total = view(u, (4*i-3):(4*i))
+    v1 = rho_v1 / rho
+    v2 = rho_v2 / rho
+    p = (equations.gammas[i] - 1) * (rho_e_total - 0.5f0 * (rho_v1 * v1 + rho_v2 * v2))
+
+    v_normal = v1 * normal_direction[1] + v2 * normal_direction[2]
+    rho_v_normal = rho * v_normal
+
+    f1 = rho_v_normal
+    f2 = rho_v_normal * v1 + p * normal_direction[1]
+    f3 = rho_v_normal * v2 + p * normal_direction[2]
+    f4 = (rho_e_total + p) * v_normal
+
     return SVector(f1, f2, f3, f4)
 end
 
@@ -239,31 +259,46 @@ end
     return SVector(f1, f2, f3, f4)
 end
 
-@inline function flux_central_upwind(u_ll, u_rr, orientation::Integer, equations::GlmMultiFluid5MomentPlasmaEquations2D)
-    fluxes_euler = SVector(ntuple(i -> flux_euler_central(u_ll, u_rr, orientation, i, equations), ncomponents(equations)))
-    flux_glm = flux_glm_upwind(u_ll, u_rr, orientation, equations)
+@inline function flux_glm_maxwell(
+    u,
+    normal_direction::AbstractVector,
+    equations::GlmMultiFluid5MomentPlasmaEquations2D,
+)
+    c_sqr = equations.speed_of_light^2
+
+    f1 = c_sqr * (equations.c_e * normal_direction[1] * u[end] - normal_direction[2] * u[end-1])
+    f2 = c_sqr * (normal_direction[1] * u[end-1] + equations.c_e * normal_direction[2] * u[end])
+    f3 = normal_direction[1] * u[end-2] - normal_direction[2] * u[end-3]
+    f4 = equations.c_e * (normal_direction[1] * u[end-3] + normal_direction[2] * u[end-2])
+
+    return SVector(f1, f2, f3, f4)
+end
+
+@inline function flux_central_upwind(u_ll, u_rr, orientation_or_normal_direction, equations::GlmMultiFluid5MomentPlasmaEquations2D)
+    fluxes_euler = SVector(ntuple(i -> flux_euler_central(u_ll, u_rr, orientation_or_normal_direction, i, equations), ncomponents(equations)))
+    flux_glm = flux_glm_upwind(u_ll, u_rr, orientation_or_normal_direction, equations)
     return vcat(reduce(vcat, fluxes_euler), flux_glm)
 end
 
-@inline function flux_ranocha_central(u_ll, u_rr, orientation::Integer, equations::GlmMultiFluid5MomentPlasmaEquations2D)
+@inline function flux_ranocha_central(u_ll, u_rr, orientation_or_normal_direction, equations::GlmMultiFluid5MomentPlasmaEquations2D)
     prim_ll = cons2prim(u_ll, equations)
     prim_rr = cons2prim(u_rr, equations)
-    fluxes_euler = SVector(ntuple(i -> flux_euler_ranocha(prim_ll, prim_rr, orientation, i, equations), ncomponents(equations)))
-    flux_glm = flux_glm_central(u_ll, u_rr, orientation, equations)
+    fluxes_euler = SVector(ntuple(i -> flux_euler_ranocha(prim_ll, prim_rr, orientation_or_normal_direction, i, equations), ncomponents(equations)))
+    flux_glm = flux_glm_central(u_ll, u_rr, orientation_or_normal_direction, equations)
     return vcat(reduce(vcat, fluxes_euler), flux_glm)
 end
 
-@inline function flux_ranocha_upwind(u_ll, u_rr, orientation::Integer, equations::GlmMultiFluid5MomentPlasmaEquations2D)
+@inline function flux_ranocha_upwind(u_ll, u_rr, orientation_or_normal_direction, equations::GlmMultiFluid5MomentPlasmaEquations2D)
     prim_ll = cons2prim(u_ll, equations)
     prim_rr = cons2prim(u_rr, equations)
-    fluxes_euler = SVector(ntuple(i -> flux_euler_ranocha(prim_ll, prim_rr, orientation, i, equations), ncomponents(equations)))
-    flux_glm = flux_glm_upwind(u_ll, u_rr, orientation, equations)
+    fluxes_euler = SVector(ntuple(i -> flux_euler_ranocha(prim_ll, prim_rr, orientation_or_normal_direction, i, equations), ncomponents(equations)))
+    flux_glm = flux_glm_upwind(u_ll, u_rr, orientation_or_normal_direction, equations)
     return vcat(reduce(vcat, fluxes_euler), flux_glm)
 end
 
-@inline function flux_euler_central(u_ll, u_rr, orientation::Integer, i,
+@inline function flux_euler_central(u_ll, u_rr, orientation_or_normal_direction, i,
                               equations::GlmMultiFluid5MomentPlasmaEquations2D)
-    return 0.5f0 * (flux_euler(u_ll, orientation, i, equations) + flux_euler(u_rr, orientation, i, equations))
+    return 0.5f0 * (flux_euler(u_ll, orientation_or_normal_direction, i, equations) + flux_euler(u_rr, orientation_or_normal_direction, i, equations))
 end
 
 @inline function flux_glm_upwind(
@@ -291,6 +326,38 @@ end
 
     return SVector(f1, f2, f3, f4)
 end
+
+#Provisional implementation for cartesian meshes but using P4est for cartesian cases
+@inline function flux_glm_upwind(
+    u_ll,
+    u_rr,
+    normal_direction::AbstractVector,
+    equations::GlmMultiFluid5MomentPlasmaEquations2D,
+)
+    c = equations.speed_of_light
+    c_e = equations.c_e
+    n = 4*ncomponents(equations)
+    u_sum = view(u_ll, (n+1):(n+4)) + view(u_rr, (n+1):(n+4))
+    u_diff = view(u_ll, (n+1):(n+4)) - view(u_rr, (n+1):(n+4))
+
+    f1_1 = 0.5f0 * c * c_e * (u_diff[1] + c * u_sum[4])
+    f2_1 = 0.5f0 * c * (u_diff[2] + c * u_sum[3])
+    f3_1 = 0.5f0 * (u_sum[2] + c * u_diff[3])
+    f4_1 = 0.5f0 * c_e * (u_sum[1] + c * u_diff[4])
+
+    f1_2 = 0.5f0 * c * (u_diff[1] - c * u_sum[3])
+    f2_2 = 0.5f0 * c * c_e * (u_diff[2] + c * u_sum[4])
+    f3_2 = 0.5f0 * (c * u_diff[3] - u_sum[1])
+    f4_2 = 0.5f0 * c_e * (u_sum[2] + c * u_diff[4])
+
+    f1 = normal_direction[1] * f1_1 + normal_direction[2] * f1_2
+    f2 = normal_direction[1] * f2_1 + normal_direction[2] * f2_2
+    f3 = normal_direction[1] * f3_1 + normal_direction[2] * f3_2
+    f4 = normal_direction[1] * f4_1 + normal_direction[2] * f4_2
+
+    return SVector(f1, f2, f3, f4)
+end
+
 
 """
     flux_euler_ranocha(u_ll, u_rr, orientation::Integer, i::Integer,
@@ -345,20 +412,56 @@ See also
     return SVector(f1, f2, f3, f4)
 end
 
-
-@inline function flux_glm_central(u_ll, u_rr, orientation::Integer,
+@inline function flux_euler_ranocha(prim_ll, prim_rr, normal_direction::AbstractVector, i::Integer,
                               equations::GlmMultiFluid5MomentPlasmaEquations2D)
-    return 0.5f0 * (flux_glm_maxwell(u_ll, orientation, equations) + flux_glm_maxwell(u_rr, orientation, equations))
+    # Unpack left and right state
+    rho_ll, v1_ll, v2_ll, p_ll = view(prim_ll, (4*i-3):(4*i))
+    rho_rr, v1_rr, v2_rr, p_rr = view(prim_rr, (4*i-3):(4*i))
+    v_dot_n_ll = v1_ll * normal_direction[1] + v2_ll * normal_direction[2]
+    v_dot_n_rr = v1_rr * normal_direction[1] + v2_rr * normal_direction[2]
+
+    # Compute the necessary mean values
+    rho_mean = ln_mean(rho_ll, rho_rr)
+    # Algebraically equivalent to `inv_ln_mean(rho_ll / p_ll, rho_rr / p_rr)`
+    # in exact arithmetic since
+    #     log((ϱₗ/pₗ) / (ϱᵣ/pᵣ)) / (ϱₗ/pₗ - ϱᵣ/pᵣ)
+    #   = pₗ pᵣ log((ϱₗ pᵣ) / (ϱᵣ pₗ)) / (ϱₗ pᵣ - ϱᵣ pₗ)
+    inv_rho_p_mean = p_ll * p_rr * inv_ln_mean(rho_ll * p_rr, rho_rr * p_ll)
+    v1_avg = 0.5f0 * (v1_ll + v1_rr)
+    v2_avg = 0.5f0 * (v2_ll + v2_rr)
+    p_avg = 0.5f0 * (p_ll + p_rr)
+    velocity_square_avg = 0.5f0 * (v1_ll * v1_rr + v2_ll * v2_rr)
+
+    # Calculate fluxes depending on normal_direction
+    f1 = rho_mean * 0.5f0 * (v_dot_n_ll + v_dot_n_rr)
+    f2 = f1 * v1_avg + p_avg * normal_direction[1]
+    f3 = f1 * v2_avg + p_avg * normal_direction[2]
+    f4 = (f1 * (velocity_square_avg + inv_rho_p_mean * equations.inv_gammas_minus_one[i])
+          +
+          0.5f0 * (p_ll * v_dot_n_rr + p_rr * v_dot_n_ll))
+
+    return SVector(f1, f2, f3, f4)
 end
 
-min_max_speed_naive(u_ll, u_rr, orientation, equations::GlmMultiFluid5MomentPlasmaEquations2D) =
+@inline function flux_glm_central(u_ll, u_rr, orientation_or_normal_direction,
+                              equations::GlmMultiFluid5MomentPlasmaEquations2D)
+    return 0.5f0 * (flux_glm_maxwell(u_ll, orientation_or_normal_direction, equations) + flux_glm_maxwell(u_rr, orientation_or_normal_direction, equations))
+end
+
+min_max_speed_naive(u_ll, u_rr, orientation::Integer, equations::GlmMultiFluid5MomentPlasmaEquations2D) =
     max(1, equations.c_e) * (-equations.speed_of_light, equations.speed_of_light)
+
+min_max_speed_naive(u_ll, u_rr, normal_direction::AbstractVector, equations::GlmMultiFluid5MomentPlasmaEquations2D) =
+    max(1, equations.c_e) * norm(normal_direction) * (-equations.speed_of_light, equations.speed_of_light)
 
 max_abs_speeds(u, equations::GlmMultiFluid5MomentPlasmaEquations2D) =
     (max(1, equations.c_e) * equations.speed_of_light, max(1, equations.c_e) * equations.speed_of_light)
 
-max_abs_speed_naive(u_ll, u_rr, orientation, equations::GlmMultiFluid5MomentPlasmaEquations2D) =
+max_abs_speed_naive(u_ll, u_rr, orientation::Integer, equations::GlmMultiFluid5MomentPlasmaEquations2D) =
     max(1, equations.c_e) * equations.speed_of_light
+
+max_abs_speed_naive(u_ll, u_rr, normal_direction::AbstractVector, equations::GlmMultiFluid5MomentPlasmaEquations2D) =
+    max(1, equations.c_e) * norm(normal_direction) * equations.speed_of_light
 
 
 function source_term_lorentz(u, x, t, equations::GlmMultiFluid5MomentPlasmaEquations2D)

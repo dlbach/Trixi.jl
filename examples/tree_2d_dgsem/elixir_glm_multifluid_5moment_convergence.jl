@@ -31,12 +31,12 @@ function source_terms_convergence(u, x, t, equations::Trixi.GlmMultiFluid5Moment
     rho_v2_y = -2*pi*sin(2*pi*x[2])
     v_1 = rho_v1 / rho
     v_2 = rho_v2 / rho
-    v_1_x = (rho_v1_x - v_1 * rho_x) / rho #2*pi*sin(2*pi*t)*sin(2*pi*x[1]) / rho^2
-    v_2_x = -v_2 * rho_x / rho #2*pi*sin(2*pi*x[1])*cos(2*pi*x[2]) / rho^2
-    v_2_y = rho_v2_y / rho #-2*pi*sin(2*pi*x[2]) / rho
+    v_1_x = (rho_v1_x - v_1 * rho_x) / rho
+    v_2_x = -v_2 * rho_x / rho
+    v_2_y = rho_v2_y / rho 
     p = gm1 * ( rho_e_total - 0.5f0 * (rho_v1^2 + rho_v2^2) / rho )
-    p_x = gm1 * 0.5f0 * rho_x * (v_1^2 + v_2^2) - gm1 * v_1 * rho_v1_x #pi*gm1*sin(2*pi*x[1])*(sin(2*pi*t)^2 + cos(2*pi*x[2])^2) / rho^2
-    p_y = gm1 * ( rho_e_total_y - v_2 * rho_v2_y)#gm1*2*pi*( cos(2*pi*x[2]) + cos(2*pi*x[2])*sin(2*pi*x[2]) / rho )
+    p_x = gm1 * 0.5f0 * rho_x * (v_1^2 + v_2^2) - gm1 * rho_v1 * v_1_x
+    p_y = gm1 * ( rho_e_total_y - v_2 * rho_v2_y)
     rho_e_p = rho_e_total + p
     rho_e_p_x = p_x
     rho_e_p_y = rho_e_total_y + p_y

@@ -4,22 +4,25 @@ using Trixi
 ###############################################################################
 # semidiscretization of the Maxwell equations
 
-@inline function initial_condition_ec(x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy3D)
-    u = SVector(5.0, 0.0, 0.0, 0.0, -10.0, 5.0, 0.0, 0.0, 0.0, -10.0, 
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-    v = rand(18) .- 0.5
-    #v[7] /= equations.speed_of_light
-    #v[8] /= equations.speed_of_light
-    v = SVector{18, Float64}(v)
-    return u + v
+function initial_condition_constant(x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquations2D)
+    return SVector(1.0, 0.2, -0.5, 10.0, 1.0, 0.2, -0.5, 10.0, 2.0, 3.0, 4.0/equations.c_sqr, 5.0/equations.c_sqr)
 end
 
-volume_flux = Trixi.flux_energy_central
-surface_flux = Trixi.flux_energy_upwind
-equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy3D((1.6, 1.6), (1.0, 1.0), (1.0, -1.0), 1e2, 1e-2, 1e0)
-mesh = TreeMesh((-1.0, -1.0, -1.0), (1.0, 1.0, 1.0), periodicity = true, initial_refinement_level = 2, n_cells_max = 10^4)
-basis = LobattoLegendreBasis(2)
+equation = Trixi.GlmMultiFluid5MomentPlasmaEquations2D((1.6, 1.6), (1.0, 1.0), (1.0, -1.0), 20.0, 10.0)
+volume_flux = Trixi.flux_ranocha_central
+surface_flux = Trixi.flux_ranocha_central
 
+coordinates_min = (-1.0, -1.0)
+coordinates_max = (1.0, 1.0)
+
+trees_per_dimension = (1, 1)
+
+mesh = P4estMesh(trees_per_dimension, polydeg = 4,
+                 coordinates_min = coordinates_min, coordinates_max = coordinates_max,
+                 initial_refinement_level = 3,
+                 periodicity = true)
+
+basis = LobattoLegendreBasis(4)
 indicator_sc = IndicatorHennemannGassner(equation, basis,
                                          alpha_max = 0.5,
                                          alpha_min = 0.001,
@@ -31,17 +34,16 @@ volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
 
 solver = DGSEM(basis, surface_flux, volume_integral)
 semi = SemidiscretizationHyperbolic(mesh, equation,
-                                    initial_condition_ec, solver, source_terms = Trixi.source_term_lorentz_corrected)
+                                    initial_condition_constant, solver)
 
 ###############################################################################
 # ODE solvers, callbacks etc.
 
 analysis_interval = 100
 analysis_callback = AnalysisCallback(semi, interval = analysis_interval,
-                                     save_analysis = true, output_directory="out",
-                                     analysis_filename="analysis.dat")
+                                     save_analysis = true)
 
-cfl = 0.0001
+cfl = 0.5
 tspan = (0.0, 1.0)
 
 ode = semidiscretize(semi, tspan)

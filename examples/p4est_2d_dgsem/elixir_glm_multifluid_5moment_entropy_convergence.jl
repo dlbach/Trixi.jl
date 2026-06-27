@@ -56,8 +56,17 @@ end
 
 volume_flux = Trixi.flux_energy_central
 equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy2D(1.4, 1.0, 1.0, 1e6, 1e-22)
-mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), periodicity = true, initial_refinement_level = 2, n_cells_max = 10^7)
-solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_energy_upwind, volume_integral = VolumeIntegralFluxDifferencing(volume_flux))
+
+coordinates_min = (-1.0, -1.0)
+coordinates_max = (1.0, 1.0)
+
+trees_per_dimension = (1, 1)
+
+mesh = P4estMesh(trees_per_dimension, polydeg = 3,
+                 coordinates_min = coordinates_min, coordinates_max = coordinates_max,
+                 initial_refinement_level = 1,
+                 periodicity = true)
+solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_energy_central, volume_integral = VolumeIntegralFluxDifferencing(volume_flux))
 semi = SemidiscretizationHyperbolic(mesh, equation,
                                     initial_condition_convergence, solver, source_terms = source_terms_convergence)
 

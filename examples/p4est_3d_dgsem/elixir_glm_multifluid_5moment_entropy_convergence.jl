@@ -5,12 +5,12 @@ using Random
 ###############################################################################
 # semidiscretization of the Maxwell equations
 
-function initial_condition_convergence(x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquations3D)
+function initial_condition_convergence(x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy3D)
     u1 = 10 + cos(2*pi*x[1])*cos(2*pi*x[3])
     u2 = cos(2*pi*x[1])*sin(2*pi*t)
-    u3 = cos(2*pi*x[2])*cos(2*pi*x[3])
+    u3 = cos(2*pi*x[2])*cos(2*pi*x[2])
     u4 = cos(2*pi*x[1])*cos(2*pi*x[3])
-    u5 = 10 + sin(2*pi*x[2])*sin(2*pi*x[3])
+    u5 = -1 + sin(2*pi*x[2])*sin(2*pi*x[3])
 
     u6 = sin(2*pi*x[1])*cos(2*pi*x[2])*sin(2*pi*t)
     u7 = -cos(2*pi*x[1])*sin(2*pi*x[2])*sin(2*pi*t)
@@ -23,7 +23,7 @@ function initial_condition_convergence(x, t, equations::Trixi.GlmMultiFluid5Mome
     return SVector(u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13)
 end
 
-function source_terms_convergence(u, x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquations3D)
+function source_terms_convergence(u, x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy3D)
     gamma = equations.gammas[1]
     gm1 = gamma - 1
     c_sqr = equations.c_sqr
@@ -34,7 +34,7 @@ function source_terms_convergence(u, x, t, equations::Trixi.GlmMultiFluid5Moment
     rho_v1 = cos(2*pi*x[1])*sin(2*pi*t)
     rho_v2 = cos(2*pi*x[2])*cos(2*pi*x[3])
     rho_v3 = cos(2*pi*x[1])*cos(2*pi*x[3])
-    rho_e = 10 + sin(2*pi*x[2])*sin(2*pi*x[3])
+    rho_s = -1 + sin(2*pi*x[2])*sin(2*pi*x[3])
 
     rho_x = -2*pi*sin(2*pi*x[1])*cos(2*pi*x[3])
     rho_z = -2*pi*cos(2*pi*x[1])*sin(2*pi*x[3])
@@ -44,14 +44,20 @@ function source_terms_convergence(u, x, t, equations::Trixi.GlmMultiFluid5Moment
     rho_v2_z = -2*pi*cos(2*pi*x[2])*sin(2*pi*x[3])
     rho_v3_x = -2*pi*sin(2*pi*x[1])*cos(2*pi*x[3])
     rho_v3_z = -2*pi*cos(2*pi*x[1])*sin(2*pi*x[3])
-    rho_e_y = 2*pi*cos(2*pi*x[2])*sin(2*pi*x[3])
-    rho_e_z = 2*pi*sin(2*pi*x[2])*cos(2*pi*x[3])
+    rho_s_y = 2*pi*cos(2*pi*x[2])*sin(2*pi*x[3])
+    rho_s_z = 2*pi*sin(2*pi*x[2])*cos(2*pi*x[3])
 
     v_1 = rho_v1 / rho
     v_2 = rho_v2 / rho
-    v_3 = rho_v3 / rho
-    p = gm1 * (rho_e - 0.5f0 * (rho_v1 * v_1 + rho_v2 * v_2 + rho_v3 * v_3))
+    v_3 = rho_v2 / rho 
+    s = rho_s / rho
+    p = rho^gamma * exp(s)
 
+
+    s_x = - s * rho_x / rho
+    s_y = rho_s_y / rho
+    s_z = (rho_s_z - s * rho_z) / rho
+    v_1_t = rho_v1_t / rho
     v_1_x = (rho_v1_x - v_1 * rho_x) / rho
     v_1_z = -v_1 * rho_z / rho
     v_2_x = -v_2 * rho_x / rho
@@ -59,15 +65,15 @@ function source_terms_convergence(u, x, t, equations::Trixi.GlmMultiFluid5Moment
     v_2_z = (rho_v2_z - v_2 * rho_z) / rho
     v_3_x = (rho_v3_x - v_3 * rho_x) / rho
     v_3_z = (rho_v3_z - v_3 * rho_z) / rho
-    p_x = -0.5f0 * gm1 * (rho_v1_x * v_1 + rho_v1 * v_1_x + rho_v2 * v_2_x + rho_v3_x * v_3 + rho_v3 * v_3_x)
-    p_y = gm1 * (rho_e_y - 0.5f0 * (rho_v2_y * v_2 + rho_v2 * v_2_y))
-    p_z = gm1 * (rho_e_z - 0.5f0 * (rho_v1 * v_1_z + rho_v2_z * v_2 + rho_v2 * v_2_z + rho_v3_z * v_3 + rho_v3 * v_3_z))
+    p_x = exp(s) * (gamma * rho^gm1 * rho_x + rho^gamma * s_x)
+    p_y = exp(s) * rho^gamma * s_y
+    p_z = exp(s) * (gamma * rho^gm1 * rho_z + rho^gamma * s_z)
 
     s1 = rho_v1_x + rho_v2_y + rho_v3_z
     s2 = v_1_x * rho_v1 + v_1 * rho_v1_x + v_1 * rho_v2_y + v_1_z * rho_v3 + v_1 * rho_v3_z + p_x + rho_v1_t
     s3 = v_2_x * rho_v1 + v_2 * rho_v1_x + v_2 * rho_v2_y + v_2_y * rho_v2 + v_2_z * rho_v3 + v_2 * rho_v3_z + p_y
     s4 = v_3_x * rho_v1 + v_3 * rho_v1_x + v_3 * rho_v2_y + v_3_z * rho_v3 + v_3 * rho_v3_z + p_z
-    s5 = (rho_e + p) * (v_1_x + v_2_y + v_3_z) + p_x * v_1 + (rho_e_y + p_y) * v_2 + (rho_e_z + p_z) * v_3
+    s5 = rho_s * (v_1_x + v_2_y + v_3_z) + rho_s_y * v_2 + rho_s_z * v_3
 
     E1 = sin(2*pi*x[1])*cos(2*pi*x[2])*sin(2*pi*t)
     E2 = -cos(2*pi*x[1])*sin(2*pi*x[2])*sin(2*pi*t)
@@ -117,10 +123,17 @@ function source_terms_convergence(u, x, t, equations::Trixi.GlmMultiFluid5Moment
 end
 
 
-volume_flux = Trixi.flux_ranocha_central
-equation = Trixi.GlmMultiFluid5MomentPlasmaEquations3D(1.4, 1.0, 1.0, 1e4, 1e-22)
-mesh = TreeMesh((-1.0, -1.0, -1.0), (1.0, 1.0, 1.0), periodicity = true, initial_refinement_level = 2, n_cells_max = 10^7)
-solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_ranocha_upwind, volume_integral = VolumeIntegralFluxDifferencing(volume_flux))
+volume_flux = Trixi.flux_energy_central
+equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy3D(1.4, 1.0, 1.0, 1e6, 1e-22)
+coordinates_min = (-1.0, -1.0, -1.0)
+coordinates_max = (1.0, 1.0, 1.0)
+
+trees_per_dimension = (1, 1, 1)
+
+mesh = P4estMesh(trees_per_dimension, polydeg = 2,
+                 coordinates_min = coordinates_min, coordinates_max = coordinates_max,
+                 periodicity = true, initial_refinement_level = 1)
+solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_energy_diss_upwind, volume_integral = VolumeIntegralFluxDifferencing(volume_flux))
 semi = SemidiscretizationHyperbolic(mesh, equation,
                                     initial_condition_convergence, solver, source_terms = source_terms_convergence)
 
@@ -132,7 +145,7 @@ analysis_callback = AnalysisCallback(semi, interval = analysis_interval,
                                      save_analysis = true)
 
 cfl = 0.5
-tspan = (0.0, 1e-5)
+tspan = (0.0, 1e-7)
 
 ode = semidiscretize(semi, tspan)
 summary_callback = SummaryCallback()

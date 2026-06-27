@@ -4,20 +4,28 @@ using Trixi
 ###############################################################################
 # semidiscretization of the Maxwell equations
 
-@inline function initial_condition_ec(x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy3D)
-    u = SVector(5.0, 0.0, 0.0, 0.0, -10.0, 5.0, 0.0, 0.0, 0.0, -10.0, 
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-    v = rand(18) .- 0.5
+@inline function initial_condition_ec(x, t, equations::Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy2D)
+    u = SVector(5.0, 0.0, 0.0, -10.0, 5.0, 0.0, 0.0, -10.0, 0.0, 0.0, 0.0, 0.0)
+    v = rand(12) .- 0.5
     #v[7] /= equations.speed_of_light
     #v[8] /= equations.speed_of_light
-    v = SVector{18, Float64}(v)
+    v = SVector{12, Float64}(v)
     return u + v
 end
 
 volume_flux = Trixi.flux_energy_central
-surface_flux = Trixi.flux_energy_upwind
-equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy3D((1.6, 1.6), (1.0, 1.0), (1.0, -1.0), 1e2, 1e-2, 1e0)
-mesh = TreeMesh((-1.0, -1.0, -1.0), (1.0, 1.0, 1.0), periodicity = true, initial_refinement_level = 2, n_cells_max = 10^4)
+surface_flux = Trixi.flux_energy_central
+equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropy2D((1.6, 1.6), (1.0, 1.0), (1.0, -1.0), 1e2, 1e-2, 1e0)
+
+coordinates_min = (-1.0, -1.0)
+coordinates_max = (1.0, 1.0)
+
+trees_per_dimension = (2, 2)
+
+mesh = P4estMesh(trees_per_dimension, polydeg = 2,
+                 coordinates_min = coordinates_min, coordinates_max = coordinates_max,
+                 initial_refinement_level = 3,
+                 periodicity = true)
 basis = LobattoLegendreBasis(2)
 
 indicator_sc = IndicatorHennemannGassner(equation, basis,

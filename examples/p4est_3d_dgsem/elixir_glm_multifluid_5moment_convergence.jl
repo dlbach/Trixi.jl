@@ -119,8 +119,15 @@ end
 
 volume_flux = Trixi.flux_ranocha_central
 equation = Trixi.GlmMultiFluid5MomentPlasmaEquations3D(1.4, 1.0, 1.0, 1e4, 1e-22)
-mesh = TreeMesh((-1.0, -1.0, -1.0), (1.0, 1.0, 1.0), periodicity = true, initial_refinement_level = 2, n_cells_max = 10^7)
-solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_ranocha_upwind, volume_integral = VolumeIntegralFluxDifferencing(volume_flux))
+coordinates_min = (-1.0, -1.0, -1.0)
+coordinates_max = (1.0, 1.0, 1.0)
+
+trees_per_dimension = (2, 2, 2)
+
+mesh = P4estMesh(trees_per_dimension, polydeg = 3,
+                 coordinates_min = coordinates_min, coordinates_max = coordinates_max,
+                 periodicity = true, initial_refinement_level = 1)
+solver = DGSEM(polydeg = 3, surface_flux = Trixi.flux_ranocha_central, volume_integral = VolumeIntegralFluxDifferencing(volume_flux))
 semi = SemidiscretizationHyperbolic(mesh, equation,
                                     initial_condition_convergence, solver, source_terms = source_terms_convergence)
 
