@@ -78,6 +78,8 @@ end
     return RealT
 end
 
+have_nonconservative_terms(::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D) = Trixi.True()
+
 # Convert conservative vaiables to primitive
 @inline function cons2prim(u, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
     prims_euler = SVector(ntuple(i -> cons2prim_euler(u, i, equations), ncomponents(equations)))
@@ -143,6 +145,27 @@ end
     w = -0.5f0 * v_square + inv_gamma_minus_one * (gamma * p_div_rho - p_div_rho * s)
 
     return SVector(w, v1, v2, v3, inv_gamma_minus_one * p_div_rho)
+end
+
+@inline function cons2entropy_euler_classic(u, i, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    rho, rho_v1, rho_v2, rho_v3, rho_s = view(u, (5*i-4):(5*i))
+
+    v1 = rho_v1 / rho
+    v2 = rho_v2 / rho
+    v3 = rho_v3 / rho
+    v_square = v1^2 + v2^2 + v3^2
+    s = rho_s / rho
+    p = rho^(equations.gammas[i]) * exp(s)
+    rho_p = rho / p
+
+    w1 = (equations.gammas[i] - s) * equations.inv_gammas_minus_one[i] -
+         0.5f0 * rho_p * v_square
+    w2 = rho_p * v1
+    w3 = rho_p * v2
+    w4 = rho_p * v3
+    w5 = -rho_p
+
+    return SVector(w1, w2, w3, w4, w5)
 end
 
 # Convert entropy variables to conservative variables
@@ -285,6 +308,7 @@ end
 
     return SVector(f1, f2, f3, f4, f5, f6, f7, f8)
 end
+
 #=
 # Calculates the GLM-Maxwell flux at a single point
 @inline function flux_glm_maxwell(u, normal_direction::AbstractVector, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
@@ -331,13 +355,22 @@ end
     prim_rr = cons2prim(u_rr, equations)
     fluxes_euler = SVector(ntuple(i -> flux_euler_energy_diss(prim_ll, prim_rr, orientation_or_normal_direction, i, equations), ncomponents(equations)))
     flux_glm = flux_glm_upwind(u_ll, u_rr, orientation_or_normal_direction, equations)
-    return vcat(reduce(vcat, fluxes_euler), flux_glm)
+    return vcat(reduce(vcat, fluxes_euler), SVector{typeof(equations.gammas[1])})
 end
 
-@inline function flux_euler_central(u_ll, u_rr, orientation_or_normal_direction, i,
-                              equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+@inline function flux_euler_central(u_ll, u_rr, orientation_or_normal_direction, i, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
     return 0.5f0 * (flux_euler(u_ll, orientation_or_normal_direction, i, equations) + flux_euler(u_rr, orientation_or_normal_direction, i, equations))
 end
+
+@inline function (dissipation::DissipationMatrixWintersEtal)(u_ll, u_rr,
+                                                             normal_direction::AbstractVector,
+                                                             equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    prim_ll = cons2prim(u_ll, equations)
+    prim_rr = cons2prim(u_rr, equations)
+    fluxes_euler = SVector(ntuple(i -> flux_euler_noncon_dissipation_winters_etal(prim_ll, prim_rr, normal_direction, i, equations), ncomponents(equations)))
+    return vcat(reduce(vcat, fluxes_euler), zeros(SVector{8, typeof(equations.gammas[1])}))
+end
+    
 
 """
     flux_euler_energy_con(u_ll, u_rr, orientation::Integer, i::Integer,
@@ -423,44 +456,216 @@ end
     return SVector(f1, f2, f3, f4, f5)
 end
 =#
-@inline function flux_euler_energy_diss(prim_ll, prim_rr, normal_direction::AbstractVector, i::Integer,
-                              equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
 
-    # Unpack left and right state
+@inline function flux_euler_noncon_dissipation_winters_etal(prim_ll, prim_rr,
+                                                            normal_direction::AbstractVector, i::Integer,
+                                                            equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    gamma = equations.gammas[i]
+    inv_gamma_minus_one = equations.inv_gammas_minus_one[i]
+
+    norm_ = norm(normal_direction)
+    unit_normal_direction = normal_direction / norm_
+
     rho_ll, v1_ll, v2_ll, v3_ll, p_ll = view(prim_ll, (5*i-4):(5*i))
     rho_rr, v1_rr, v2_rr, v3_rr, p_rr = view(prim_rr, (5*i-4):(5*i))
-    gamma = equations.gammas[i]
-    gamma_m1 = gamma - 1
 
-    p_div_rho_ll = p_ll / rho_ll
-    p_div_rho_rr = p_rr / rho_rr
-    v_dot_n_ll = v1_ll * normal_direction[1] + v2_ll * normal_direction[2] +
-                 v3_ll * normal_direction[3]
-    v_dot_n_rr = v1_rr * normal_direction[1] + v2_rr * normal_direction[2] +
-                 v3_rr * normal_direction[3]
+    b_ll = rho_ll / (2 * p_ll)
+    b_rr = rho_rr / (2 * p_rr)
 
-    # Compute the necessary mean values
-    rho_mean = ln_mean(rho_ll, rho_rr)
-    ln_rho_avg = 0.5f0 * log(rho_ll * rho_rr)
-    rho_avg = 0.5f0 * (rho_ll + rho_rr)
+    rho_e_total_ll = 0.5f0 * rho_ll * (v1_ll^2 + v2_ll^2 + v3_ll^2) + p_ll * inv_gamma_minus_one
+    rho_e_total_rr = 0.5f0 * rho_rr * (v1_rr^2 + v2_rr^2 + v3_rr^2) + p_rr * inv_gamma_minus_one
+
+    rho_log = ln_mean(rho_ll, rho_rr)
+    b_log = ln_mean(b_ll, b_rr)
     v1_avg = 0.5f0 * (v1_ll + v1_rr)
     v2_avg = 0.5f0 * (v2_ll + v2_rr)
     v3_avg = 0.5f0 * (v3_ll + v3_rr)
-    v_dot_n_avg = 0.5f0 * (v_dot_n_ll + v_dot_n_rr)
-    p_avg = 0.5f0 * (p_ll + p_rr)
-    p_div_rho_ln_ratio = Trixi.ln_ratio(p_div_rho_ll, p_div_rho_rr)
+    p_avg = 0.5f0 * (rho_ll + rho_rr) / (b_ll + b_rr) # 2 * b_avg = b_ll + b_rr
+    v_squared_bar = v1_ll * v1_rr + v2_ll * v2_rr + v3_ll * v3_rr
+    h_bar = gamma / (2 * b_log * (gamma - 1)) + 0.5f0 * v_squared_bar
+    c_bar = sqrt(gamma * p_avg / rho_log)
 
-    # Calculate fluxes depending on orientation
-    f1 = rho_mean * v_dot_n_avg
-    f2 = f1 * v1_avg + p_avg * normal_direction[1]
-    f3 = f1 * v2_avg + p_avg * normal_direction[2]
-    f4 = f1 * v3_avg + p_avg * normal_direction[3]
-    f5 = f1 * (p_div_rho_ln_ratio - gamma - gamma_m1 * ln_rho_avg) +
-         gamma_m1 * rho_avg * v_dot_n_avg -
-         (p_div_rho_ll - p_div_rho_rr)
+    v_avg_normal = dot(SVector(v1_avg, v2_avg), unit_normal_direction)
 
-    return SVector(f1, f2, f3, f4, f5)
+    lambda_1 = abs(v_avg_normal - c_bar) * rho_log / (2 * gamma)
+    lambda_2 = abs(v_avg_normal) * rho_log * (gamma - 1) / gamma
+    lambda_3 = abs(v_avg_normal + c_bar) * rho_log / (2 * gamma)
+    lambda_4 = abs(v_avg_normal) * p_avg
+
+    v1_minus_c = v1_avg - c_bar * unit_normal_direction[1]
+    v2_minus_c = v2_avg - c_bar * unit_normal_direction[2]
+    v3_minus_c = v3_avg
+    v1_plus_c = v1_avg + c_bar * unit_normal_direction[1]
+    v2_plus_c = v2_avg + c_bar * unit_normal_direction[2]
+    v3_plus_c = v3_avg
+    v1_tangential = v1_avg - v_avg_normal * unit_normal_direction[1]
+    v2_tangential = v2_avg - v_avg_normal * unit_normal_direction[2]
+    v3_tangential = v3_avg
+
+
+    entropy_classic_ll = cons2entropy_euler_classic(SVector(rho_ll, rho_ll * v1_ll, rho_ll * v2_ll, rho_ll * v3_ll, rho_e_total_ll), i, equations)
+    entropy_classic_rr = cons2entropy_euler_classic(SVector(rho_rr, rho_rr * v1_rr, rho_rr * v2_rr, rho_rr * v3_rr, rho_e_total_rr), i, equations)
+
+    entropy_vars_jump = entropy_classic_ll - entropy_classic_rr
+
+    entropy_var_rho_jump, entropy_var_rho_v1_jump,
+    entropy_var_rho_v2_jump, entropy_var_rho_v3_jump, entropy_var_rho_e_jump = entropy_vars_jump
+
+    velocity_minus_c_dot_entropy_vars_jump = v1_minus_c * entropy_var_rho_v1_jump +
+                                             v2_minus_c * entropy_var_rho_v2_jump +
+                                             v3_minus_c * entropy_var_rho_v3_jump
+    velocity_plus_c_dot_entropy_vars_jump = v1_plus_c * entropy_var_rho_v1_jump +
+                                            v2_plus_c * entropy_var_rho_v2_jump +
+                                            v3_plus_c * entropy_var_rho_v3_jump
+    velocity_avg_dot_vjump = v1_avg * entropy_var_rho_v1_jump +
+                             v2_avg * entropy_var_rho_v2_jump +
+                             v3_avg * entropy_var_rho_v3_jump
+
+    w1 = lambda_1 * (entropy_var_rho_jump + velocity_minus_c_dot_entropy_vars_jump +
+          (h_bar - c_bar * v_avg_normal) * entropy_var_rho_e_jump)
+    w2 = lambda_2 * (entropy_var_rho_jump + velocity_avg_dot_vjump +
+          v_squared_bar / 2 * entropy_var_rho_e_jump)
+    w3 = lambda_3 * (entropy_var_rho_jump + velocity_plus_c_dot_entropy_vars_jump +
+          (h_bar + c_bar * v_avg_normal) * entropy_var_rho_e_jump)
+
+    entropy_var_v_normal_jump = dot(SVector(entropy_var_rho_v1_jump,
+                                        entropy_var_rho_v2_jump),
+                                    unit_normal_direction)
+
+
+    dissipation_rho = w1 + w2 + w3
+
+    dissipation_rho_v1 = (w1 * v1_minus_c +
+                        w2 * v1_avg +
+                        w3 * v1_plus_c +
+                        lambda_4 * (entropy_var_rho_v1_jump -
+                        unit_normal_direction[1] * entropy_var_v_normal_jump +
+                        entropy_var_rho_e_jump * v1_tangential))
+
+    dissipation_rho_v2 = (w1 * v2_minus_c +
+                        w2 * v2_avg +
+                        w3 * v2_plus_c +
+                        lambda_4 * (entropy_var_rho_v2_jump -
+                        unit_normal_direction[2] * entropy_var_v_normal_jump +
+                        entropy_var_rho_e_jump * v2_tangential))
+
+    dissipation_rho_v3 = (w1 * v3_minus_c +
+                        w2 * v3_avg +
+                        w3 * v3_plus_c +
+                        lambda_4 * (entropy_var_rho_v3_jump +
+                        entropy_var_rho_e_jump * v3_tangential))
+
+    v_tangential_dot_entropy_vars_jump = v1_tangential * entropy_var_rho_v1_jump +
+                                         v2_tangential * entropy_var_rho_v2_jump +
+                                         v3_tangential * entropy_var_rho_v3_jump
+
+    dissipation_rhoe = (w1 * (h_bar - c_bar * v_avg_normal) +
+                        w2 * 0.5f0 * v_squared_bar +
+                        w3 * (h_bar + c_bar * v_avg_normal) +
+                        lambda_4 * (v_tangential_dot_entropy_vars_jump +
+                         entropy_var_rho_e_jump *
+                         (v1_avg^2 + v2_avg^2 + v3_avg^2 - v_avg_normal^2)))
+        
+
+    original_dissipation = -0.5f0 *
+           SVector(dissipation_rho, dissipation_rho_v1, dissipation_rho_v2, dissipation_rho_v3,
+                   dissipation_rhoe) * norm_
+    #dissipation_rho = 0.0
+    dissipation_entropy = -dot(entropy_classic_ll, original_dissipation)
+    #dissipation_rho_v1 = 0.0
+    #dissipation_rho_v2 = 0.0
+    #dissipation_rho_v3 = 0.0
+    return 2.0*SVector(dissipation_rho, dissipation_rho_v1, dissipation_rho_v2, dissipation_rho_v3, dissipation_entropy)
+
+
+#=
+norm_ = norm(normal_direction)
+    unit_normal_direction = normal_direction / norm_
+
+    rho_ll, v1_ll, v2_ll, p_ll = cons2prim(u_ll, equations)
+    rho_rr, v1_rr, v2_rr, p_rr = cons2prim(u_rr, equations)
+
+    b_ll = rho_ll / (2 * p_ll)
+    b_rr = rho_rr / (2 * p_rr)
+
+    rho_log = ln_mean(rho_ll, rho_rr)
+    b_log = ln_mean(b_ll, b_rr)
+    v1_avg = 0.5f0 * (v1_ll + v1_rr)
+    v2_avg = 0.5f0 * (v2_ll + v2_rr)
+    p_avg = 0.5f0 * (rho_ll + rho_rr) / (b_ll + b_rr) # 2 * b_avg = b_ll + b_rr
+    v_squared_bar = v1_ll * v1_rr + v2_ll * v2_rr
+    h_bar = gamma / (2 * b_log * (gamma - 1)) + 0.5f0 * v_squared_bar
+    c_bar = sqrt(gamma * p_avg / rho_log)
+
+    v_avg_normal = dot(SVector(v1_avg, v2_avg), unit_normal_direction)
+
+    lambda_1 = abs(v_avg_normal - c_bar) * rho_log / (2 * gamma)
+    lambda_2 = abs(v_avg_normal) * rho_log * (gamma - 1) / gamma
+    lambda_3 = abs(v_avg_normal + c_bar) * rho_log / (2 * gamma)
+    lambda_4 = abs(v_avg_normal) * p_avg
+
+    v1_minus_c = v1_avg - c_bar * unit_normal_direction[1]
+    v2_minus_c = v2_avg - c_bar * unit_normal_direction[2]
+    v1_plus_c = v1_avg + c_bar * unit_normal_direction[1]
+    v2_plus_c = v2_avg + c_bar * unit_normal_direction[2]
+    v1_tangential = v1_avg - v_avg_normal * unit_normal_direction[1]
+    v2_tangential = v2_avg - v_avg_normal * unit_normal_direction[2]
+
+    entropy_vars_jump = cons2entropy(u_rr, equations) - cons2entropy(u_ll, equations)
+    entropy_var_rho_jump, entropy_var_rho_v1_jump,
+    entropy_var_rho_v2_jump, entropy_var_rho_e_jump = entropy_vars_jump
+
+    velocity_minus_c_dot_entropy_vars_jump = v1_minus_c * entropy_var_rho_v1_jump +
+                                             v2_minus_c * entropy_var_rho_v2_jump
+    velocity_plus_c_dot_entropy_vars_jump = v1_plus_c * entropy_var_rho_v1_jump +
+                                            v2_plus_c * entropy_var_rho_v2_jump
+    velocity_avg_dot_vjump = v1_avg * entropy_var_rho_v1_jump +
+                             v2_avg * entropy_var_rho_v2_jump
+    w1 = lambda_1 * (entropy_var_rho_jump + velocity_minus_c_dot_entropy_vars_jump +
+          (h_bar - c_bar * v_avg_normal) * entropy_var_rho_e_jump)
+    w2 = lambda_2 * (entropy_var_rho_jump + velocity_avg_dot_vjump +
+          v_squared_bar / 2 * entropy_var_rho_e_jump)
+    w3 = lambda_3 * (entropy_var_rho_jump + velocity_plus_c_dot_entropy_vars_jump +
+          (h_bar + c_bar * v_avg_normal) * entropy_var_rho_e_jump)
+
+    entropy_var_v_normal_jump = dot(SVector(entropy_var_rho_v1_jump,
+                                            entropy_var_rho_v2_jump),
+                                    unit_normal_direction)
+
+    dissipation_rho = w1 + w2 + w3
+
+    dissipation_rho_v1 = (w1 * v1_minus_c +
+                          w2 * v1_avg +
+                          w3 * v1_plus_c +
+                          lambda_4 * (entropy_var_rho_v1_jump -
+                           unit_normal_direction[1] * entropy_var_v_normal_jump +
+                           entropy_var_rho_e_jump * v1_tangential))
+
+    dissipation_rho_v2 = (w1 * v2_minus_c +
+                          w2 * v2_avg +
+                          w3 * v2_plus_c +
+                          lambda_4 * (entropy_var_rho_v2_jump -
+                           unit_normal_direction[2] * entropy_var_v_normal_jump +
+                           entropy_var_rho_e_jump * v2_tangential))
+
+    v_tangential_dot_entropy_vars_jump = v1_tangential * entropy_var_rho_v1_jump +
+                                         v2_tangential * entropy_var_rho_v2_jump
+
+    dissipation_rhoe = (w1 * (h_bar - c_bar * v_avg_normal) +
+                        w2 * 0.5f0 * v_squared_bar +
+                        w3 * (h_bar + c_bar * v_avg_normal) +
+                        lambda_4 * (v_tangential_dot_entropy_vars_jump +
+                         entropy_var_rho_e_jump *
+                         (v1_avg^2 + v2_avg^2 - v_avg_normal^2)))
+
+    return -0.5f0 *
+           SVector(dissipation_rho, dissipation_rho_v1, dissipation_rho_v2,
+                   dissipation_rhoe) * norm_
+=#
+
 end
+
+@inline flux_noncon_empty(u_ll, u_rr, orientation_or_normal_direction, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D) = zeros(SVector{nvariables(equations), typeof(equations.gammas[1])})
 
 @inline function flux_glm_upwind(
     u_ll,
@@ -691,131 +896,16 @@ end
     return minimum(rho_times_p)
 end
 
-#=
-@inline function flux_upwind(
-    u_ll,
-    u_rr,
-    orientation::Integer,
-    equations::GLMMaxwellEquations2D,
-)
-    c = equations.speed_of_light
-    c_h = equations.c_h
-    u_sum = u_ll + u_rr
-    u_diff = u_ll - u_rr
-    if orientation == 1
-        f1 = 0.5f0 * c * (c_h * u_diff[1] + c * u_sum[4])
-        f2 = 0.5f0 * c * (u_diff[2] + c * u_sum[3])
-        f3 = 0.5f0 * (u_sum[2] + c * u_diff[3])
-        f4 = 0.5f0 * c_h * (c_h * u_sum[1] + c * u_diff[4])
-    else
-        f1 = 0.5f0 * c * (u_diff[1] - c * u_sum[3])
-        f2 = 0.5f0 * c * (c_h * u_diff[2] + c * u_sum[4])
-        f3 = 0.5f0 * (c * u_diff[3] - u_sum[1])
-        f4 = 0.5f0 * c_h * (c_h * u_sum[2] + c * u_diff[4])
-    end
-
-    return SVector(f1, f2, f3, f4)
+@inline function density_pressure_alt(u, equations::Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    rhos = densities(u, equations)
+    entr_s = entropies(u, equations)
+    E1, E2, E3 = electric_field(u, equations)
+    B1, B2, B3 = magnetic_field(u, equations)
+    chi_E = u[end-1]
+    chi_B = u[end]
+    EM_pressure = 0.5f0 * ( equations.permittivity * (E1^2 + E2^2 + E3^2 + chi_B^2) + (B1^2 + B2^2 + B3^2 + chi_E^2) / equations.permeability)
+    rho_times_p = rhos.^(equations.gammas .+ 1) .* exp.(entr_s ./ rhos)
+    return sum(rhos)
 end
 
-
-@inline function flux_upwind(
-    u_ll,
-    u_rr,
-    normal_direction::AbstractVector,
-    equations::GLMMaxwellEquations2D,
-)
-    c = equations.speed_of_light
-    c_h = equations.c_h
-    u_sum = u_ll + u_rr
-    u_diff = u_ll - u_rr
-    flux_component_1 =
-        c_h *
-        (normal_direction[1] * u_diff[1] + normal_direction[2] * u_diff[2]) +
-        c * u_sum[4]
-    flux_component_2 =
-        normal_direction[1] * u_diff[2] - normal_direction[2] * u_diff[1] + c * u_sum[3]
-
-    f1 =
-        0.5f0 *
-        c *
-        (
-            normal_direction[1] * flux_component_1 -
-            normal_direction[2] * flux_component_2
-        )
-    f2 =
-        0.5f0 *
-        c *
-        (
-            normal_direction[2] * flux_component_1 +
-            normal_direction[1] * flux_component_2
-        )
-    f3 =
-        0.5f0 * (
-            normal_direction[1] * u_sum[2] - normal_direction[2] * u_sum[1] +
-            c * u_diff[3]
-        )
-    f4 =
-        0.5f0 *
-        c_h *
-        (
-            c_h *
-            (normal_direction[1] * u_sum[1] + normal_direction[2] * u_sum[2]) +
-            c * u_diff[4]
-        )
-
-    return SVector(f1, f2, f3, f4)
-end
-
-function boundary_condition_perfect_conducting_wall(
-    u_inner,
-    normal_direction::AbstractVector,
-    direction,
-    x,
-    t,
-    surface_flux_function,
-    equations::GLMMaxwellEquations2D,
-)
-    psi_outer =
-        2.0f0 *
-        equations.c_h *
-        (normal_direction[1] * u_inner[1] + normal_direction[2] * u_inner[2]) / equations.speed_of_light
-    if iseven(direction)
-        return surface_flux_function(
-            u_inner,
-            SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] - psi_outer),
-            normal_direction,
-            equations,
-        )
-    else
-        return -surface_flux_function(
-            u_inner,
-            SVector(-u_inner[1], -u_inner[2], u_inner[3], -u_inner[4] + psi_outer),
-            -normal_direction,
-            equations,
-        )
-    end
-end
-
-function initial_condition_free_stream(x, t, equations::GLMMaxwellEquations2D)
-    return SVector(10.0f0, 10.0f0, 10.0f0 / equations.speed_of_light, 10.0f0 / equations.speed_of_light)
-end
-
-function initial_condition_convergence_test(x, t, equations::GLMMaxwellEquations2D)
-    c = equations.speed_of_light
-    e1 = sin(x[2] + c * t)
-    e2 = -sin(x[1] + c * t)
-    b = (sin(x[1] + c * t) + sin(x[2] + c * t)) / c
-
-    return SVector(e1, e2, b, 0.0f0)
-end
-
-min_max_speed_naive(u_ll, u_rr, orientation, equations::GLMMaxwellEquations2D) =
-    max(1.0f0, equations.c_h) * (-equations.speed_of_light, equations.speed_of_light)
-
-max_abs_speeds(u, equations::GLMMaxwellEquations2D) =
-    (max(1.0f0, equations.c_h) * equations.speed_of_light, max(1.0f0, equations.c_h) * equations.speed_of_light)
-
-max_abs_speed_naive(u_ll, u_rr, orientation, equations::GLMMaxwellEquations2D) =
-    max(1.0f0, equations.c_h) * equations.speed_of_light
-=#
 end # @muladd
