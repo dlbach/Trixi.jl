@@ -142,30 +142,30 @@ end
     v_square = v1^2 + v2^2 + v3^2
     p_div_rho = p / rho
 
-    w = -0.5f0 * v_square + inv_gamma_minus_one * (gamma * p_div_rho - p_div_rho * s)
+    w = -0.5f0 * v_square + inv_gamma_minus_one * p_div_rho * (gamma - s)
 
     return SVector(w, v1, v2, v3, inv_gamma_minus_one * p_div_rho)
 end
 
-@inline function cons2entropy_euler_classic(u, i, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
-    rho, rho_v1, rho_v2, rho_v3, rho_s = view(u, (5*i-4):(5*i))
+@inline function cons2entropy_euler_classic(u, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    rho, rho_v1, rho_v2, rho_v3, rho_s = u
 
     v1 = rho_v1 / rho
     v2 = rho_v2 / rho
     v3 = rho_v3 / rho
     v_square = v1^2 + v2^2 + v3^2
     s = rho_s / rho
-    p = rho^(equations.gammas[i]) * exp(s)
+    p = rho^(equations.gammas[1]) * exp(s)
     rho_p = rho / p
 
-    w1 = (equations.gammas[i] - s) * equations.inv_gammas_minus_one[i] -
+    w1 = (equations.gammas[1] - s) * equations.inv_gammas_minus_one[1] -
          0.5f0 * rho_p * v_square
     w2 = rho_p * v1
     w3 = rho_p * v2
     w4 = rho_p * v3
     w5 = -rho_p
 
-    return SVector(w1, w2, w3, w4, w5)
+    return (equations.gammas[1] - 1) * SVector(w1, w2, w3, w4, w5)
 end
 
 # Convert entropy variables to conservative variables
@@ -457,24 +457,169 @@ end
 end
 =#
 
+# Rotate normal vector to x-axis; normal, tangent1 and tangent2 need to be orthonormal
+# Called inside `FluxRotated` in `numerical_fluxes.jl` so the directions
+# has been normalized prior to this rotation of the state vector
+@inline function rotate_to_x(u, normal_vector, tangent1, tangent2,
+                             equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    # Multiply with [ 1   0        0       0   0;
+    #                 0   ―  normal_vector ―   0;
+    #                 0   ―    tangent1    ―   0;
+    #                 0   ―    tangent2    ―   0;
+    #                 0   0        0       0   1 ]
+    return SVector(u[1],
+                   normal_vector[1] * u[2] + normal_vector[2] * u[3] +
+                   normal_vector[3] * u[4],
+                   tangent1[1] * u[2] + tangent1[2] * u[3] + tangent1[3] * u[4],
+                   tangent2[1] * u[2] + tangent2[2] * u[3] + tangent2[3] * u[4],
+                   u[5])
+end
+
+# Rotate x-axis to normal vector; normal, tangent1 and tangent2 need to be orthonormal
+# Called inside `FluxRotated` in `numerical_fluxes.jl` so the directions
+# has been normalized prior to this back-rotation of the state vector
+@inline function rotate_from_x(u, normal_vector, tangent1, tangent2,
+                               equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    # Multiply with [ 1        0          0        0      0;
+    #                 0        |          |        |      0;
+    #                 0  normal_vector tangent1 tangent2  0;
+    #                 0        |          |        |      0;
+    #                 0        0          0        0      1 ]
+    return SVector(u[1],
+                   normal_vector[1] * u[2] + tangent1[1] * u[3] + tangent2[1] * u[4],
+                   normal_vector[2] * u[2] + tangent1[2] * u[3] + tangent2[2] * u[4],
+                   normal_vector[3] * u[2] + tangent1[3] * u[3] + tangent2[3] * u[4],
+                   u[5])
+end
+
 @inline function flux_euler_noncon_dissipation_winters_etal(prim_ll, prim_rr,
                                                             normal_direction::AbstractVector, i::Integer,
                                                             equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
     gamma = equations.gammas[i]
     inv_gamma_minus_one = equations.inv_gammas_minus_one[i]
 
-    norm_ = norm(normal_direction)
-    unit_normal_direction = normal_direction / norm_
+    normal_direction_ = SVector(normal_direction[1], normal_direction[2], 0)
+    norm_ = norm(normal_direction_)
+    normal_vector = normal_direction_ / norm_
 
     rho_ll, v1_ll, v2_ll, v3_ll, p_ll = view(prim_ll, (5*i-4):(5*i))
     rho_rr, v1_rr, v2_rr, v3_rr, p_rr = view(prim_rr, (5*i-4):(5*i))
 
-    b_ll = rho_ll / (2 * p_ll)
-    b_rr = rho_rr / (2 * p_rr)
+    rho_e_total_ll = 0.5f0 * rho_ll * (v1_ll^2 + v2_ll^2 + v3_ll^2) + p_ll * inv_gamma_minus_one
+    rho_e_total_rr = 0.5f0 * rho_rr * (v1_rr^2 + v2_rr^2 + v3_rr^2) + p_rr * inv_gamma_minus_one
+
+    u_ll_ = SVector(rho_ll, rho_ll * v1_ll, rho_ll * v2_ll, rho_ll * v3_ll, p_ll)
+    u_rr_ = SVector(rho_rr, rho_rr * v1_rr, rho_rr * v2_rr, rho_rr * v3_rr, p_rr)
+    # Step 1:
+    # Rotate solution into the appropriate direction
+
+    # Some vector that can't be identical to normal_vector (unless normal_vector == 0)
+    tangent1 = SVector(normal_direction_[2], normal_direction_[3], -normal_direction_[1])
+    # Orthogonal projection
+    tangent1 -= dot(normal_vector, tangent1) * normal_vector
+    tangent1 = normalize(tangent1)
+
+    # Third orthogonal vector
+    tangent2 = normalize(cross(normal_direction_, tangent1))
+
+    u_ll_rotated = rotate_to_x(u_ll_, normal_vector, tangent1, tangent2, equations)
+    u_rr_rotated = rotate_to_x(u_rr_, normal_vector, tangent1, tangent2, equations)
+
+    # Step 2:
+    # Compute the averages using the rotated variables
+    v1_ll = u_ll_rotated[2] / u_ll_rotated[1]
+    v2_ll = u_ll_rotated[3] / u_ll_rotated[1]
+    v3_ll = u_ll_rotated[4] / u_ll_rotated[1]
+    v1_rr = u_rr_rotated[2] / u_rr_rotated[1]
+    v2_rr = u_rr_rotated[3] / u_rr_rotated[1]
+    v3_rr = u_rr_rotated[4] / u_rr_rotated[1]
 
     rho_e_total_ll = 0.5f0 * rho_ll * (v1_ll^2 + v2_ll^2 + v3_ll^2) + p_ll * inv_gamma_minus_one
     rho_e_total_rr = 0.5f0 * rho_rr * (v1_rr^2 + v2_rr^2 + v3_rr^2) + p_rr * inv_gamma_minus_one
 
+    b_ll = rho_ll / (2 * p_ll)
+    b_rr = rho_rr / (2 * p_rr)
+
+    rho_log = ln_mean(rho_ll, rho_rr)
+    b_log = ln_mean(b_ll, b_rr)
+    v1_avg = 0.5f0 * (v1_ll + v1_rr)
+    v2_avg = 0.5f0 * (v2_ll + v2_rr)
+    v3_avg = 0.5f0 * (v3_ll + v3_rr)
+    p_avg = 0.5f0 * (rho_ll + rho_rr) / (b_ll + b_rr)
+    v_squared_bar = v1_ll * v1_rr + v2_ll * v2_rr + v3_ll * v3_rr
+    h_bar = gamma / (2 * b_log * (gamma - 1)) + 0.5f0 * v_squared_bar
+    c_bar = sqrt(gamma * p_avg / rho_log)
+
+    # Step 3:
+    # Build the dissipation term as given in Appendix A of the paper 
+    # - A. R. Winters, D. Derigs, G. Gassner, S. Walch, A uniquely defined entropy stable matrix dissipation operator 
+    # for high Mach number ideal MHD and compressible Euler simulations (2017). Journal of Computational Physics.
+    # [DOI: 10.1016/j.jcp.2016.12.006](https://doi.org/10.1016/j.jcp.2016.12.006).
+
+    # Get entropy variables jump in the rotated variables
+    entropy_classic_ll = cons2entropy_euler_classic(SVector(rho_ll, rho_ll * v1_ll, rho_ll * v2_ll, rho_ll * v3_ll, rho_e_total_ll), equations)
+    entropy_classic_rr = cons2entropy_euler_classic(SVector(rho_rr, rho_rr * v1_rr, rho_rr * v2_rr, rho_rr * v3_rr, rho_e_total_rr), equations)
+    w_jump = entropy_classic_rr - entropy_classic_ll
+
+    # Entries of the diagonal scaling matrix where D = ABS(\Lambda)T
+    lambda_1 = abs(v1_avg - c_bar) * rho_log / (2 * gamma)
+    lambda_2 = abs(v1_avg) * rho_log * (gamma - 1) / gamma
+    lambda_3 = abs(v1_avg) * p_avg # scaled repeated eigenvalue in the tangential direction
+    lambda_5 = abs(v1_avg + c_bar) * rho_log / (2 * gamma)
+    D = SVector(lambda_1, lambda_2, lambda_3, lambda_3, lambda_5)
+
+    # Entries of the right eigenvector matrix (others have already been precomputed)
+    r21 = v1_avg - c_bar
+    r25 = v1_avg + c_bar
+    r51 = h_bar - v1_avg * c_bar
+    r52 = 0.5f0 * v_squared_bar
+    r55 = h_bar + v1_avg * c_bar
+
+    # Build R and transpose of R matrices
+    R = @SMatrix [[1;; 1;; 0;; 0;; 1];
+                  [r21;; v1_avg;; 0;; 0;; r25];
+                  [v2_avg;; v2_avg;; 1;; 0;; v2_avg];
+                  [v3_avg;; v3_avg;; 0;; 1;; v3_avg];
+                  [r51;; r52;; v2_avg;; v3_avg;; r55]]
+
+    RT = @SMatrix [[1;; r21;; v2_avg;; v3_avg;; r51];
+                   [1;; v1_avg;; v2_avg;; v3_avg;; r52];
+                   [0;; 0;; 1;; 0;; v2_avg];
+                   [0;; 0;; 0;; 1;; v3_avg];
+                   [1;; r25;; v2_avg;; v3_avg;; r55]]
+
+    # Compute the dissipation term R * D * R^T * [[w]] from right-to-left
+
+    # First comes R^T * [[w]]
+    diss = RT * w_jump
+    # Next multiply with the eigenvalues and Barth scaling
+    diss = D .* diss
+    # Finally apply the remaining eigenvector matrix
+    diss = R * diss
+
+    original_dissipation = -0.5f0 * rotate_from_x(diss, normal_vector, tangent1, tangent2, equations) * norm_
+    
+    u_ll___ = prim2cons(prim_ll, equations)
+    ent_ll_ = cons2entropy(u_ll___, equations)
+    entropy_classic_ll_2 = cons2entropy_euler_classic(view(u_ll___, (5*i-4):(5*i)), equations)
+
+    dissipation_entropy = -dot(entropy_classic_ll_2, original_dissipation)
+    back_converted = dot(SVector(original_dissipation[1], original_dissipation[2], original_dissipation[3], original_dissipation[4], dissipation_entropy), view(ent_ll_, (5*i-4):(5*i)))
+    
+
+    println(original_dissipation[5])
+    println(back_converted)
+    println()
+
+    #dissipation_rho = 0.0
+    #dissipation_rho_v1 = 0.0
+    #dissipation_rho_v2 = 0.0
+    #dissipation_rho_v3 = 0.0
+    #dissipation_entropy = 0.0
+    return SVector(original_dissipation[1], original_dissipation[2], 
+                   original_dissipation[3], original_dissipation[4], dissipation_entropy)
+
+    #=
     rho_log = ln_mean(rho_ll, rho_rr)
     b_log = ln_mean(b_ll, b_rr)
     v1_avg = 0.5f0 * (v1_ll + v1_rr)
@@ -570,14 +715,15 @@ end
     original_dissipation = -0.5f0 *
            SVector(dissipation_rho, dissipation_rho_v1, dissipation_rho_v2, dissipation_rho_v3,
                    dissipation_rhoe) * norm_
-    #dissipation_rho = 0.0
     dissipation_entropy = -dot(entropy_classic_ll, original_dissipation)
+    #dissipation_rho = 0.0
     #dissipation_rho_v1 = 0.0
     #dissipation_rho_v2 = 0.0
     #dissipation_rho_v3 = 0.0
+    #dissipation_entropy = 0.0
     return 2.0*SVector(dissipation_rho, dissipation_rho_v1, dissipation_rho_v2, dissipation_rho_v3, dissipation_entropy)
 
-
+=#
 #=
 norm_ = norm(normal_direction)
     unit_normal_direction = normal_direction / norm_
