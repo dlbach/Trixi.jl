@@ -505,9 +505,6 @@ end
     rho_ll, v1_ll, v2_ll, v3_ll, p_ll = view(prim_ll, (5*i-4):(5*i))
     rho_rr, v1_rr, v2_rr, v3_rr, p_rr = view(prim_rr, (5*i-4):(5*i))
 
-    rho_e_total_ll = 0.5f0 * rho_ll * (v1_ll^2 + v2_ll^2 + v3_ll^2) + p_ll * inv_gamma_minus_one
-    rho_e_total_rr = 0.5f0 * rho_rr * (v1_rr^2 + v2_rr^2 + v3_rr^2) + p_rr * inv_gamma_minus_one
-
     u_ll_ = SVector(rho_ll, rho_ll * v1_ll, rho_ll * v2_ll, rho_ll * v3_ll, p_ll)
     u_rr_ = SVector(rho_rr, rho_rr * v1_rr, rho_rr * v2_rr, rho_rr * v3_rr, p_rr)
     # Step 1:
@@ -600,22 +597,23 @@ end
     original_dissipation = -0.5f0 * rotate_from_x(diss, normal_vector, tangent1, tangent2, equations) * norm_
     
     u_ll___ = prim2cons(prim_ll, equations)
-    ent_ll_ = cons2entropy(u_ll___, equations)
+    #ent_ll_ = cons2entropy(u_ll___, equations)
     entropy_classic_ll_2 = cons2entropy_euler_classic(view(u_ll___, (5*i-4):(5*i)), equations)
 
-    dissipation_entropy = -dot(entropy_classic_ll_2, original_dissipation)
-    back_converted = dot(SVector(original_dissipation[1], original_dissipation[2], original_dissipation[3], original_dissipation[4], dissipation_entropy), view(ent_ll_, (5*i-4):(5*i)))
-    
+    #u_rr___ = prim2cons(prim_rr, equations)
+    #ent_rr_ = cons2entropy(u_rr___, equations)
+    #entropy_classic_rr_2 = cons2entropy_euler_classic(view(u_rr___, (5*i-4):(5*i)), equations)
 
+    dissipation_entropy = -dot(entropy_classic_ll_2, original_dissipation)
+    #back_converted = dot(SVector(original_dissipation[1], original_dissipation[2], original_dissipation[3], original_dissipation[4], dissipation_entropy), view(ent_ll_, (5*i-4):(5*i)))
+    #dissipation_entropy_rr = -dot(entropy_classic_rr_2, original_dissipation)
+    #back_converted_rr = dot(SVector(original_dissipation[1], original_dissipation[2], original_dissipation[3], original_dissipation[4], dissipation_entropy_rr), view(ent_rr_, (5*i-4):(5*i)))
+    #=
     println(original_dissipation[5])
     println(back_converted)
+    println(back_converted_rr)
     println()
-
-    #dissipation_rho = 0.0
-    #dissipation_rho_v1 = 0.0
-    #dissipation_rho_v2 = 0.0
-    #dissipation_rho_v3 = 0.0
-    #dissipation_entropy = 0.0
+    =#
     return SVector(original_dissipation[1], original_dissipation[2], 
                    original_dissipation[3], original_dissipation[4], dissipation_entropy)
 

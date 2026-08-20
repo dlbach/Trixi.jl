@@ -65,14 +65,14 @@ end
 
 speed_of_light = 10.0
 permittivity = inv(speed_of_light^2)
-volume_flux = Trixi.flux_energy_central
-surface_flux = Trixi.flux_lax_friedrichs
+volume_flux = (Trixi.flux_energy_central, Trixi.flux_noncon_empty)
+surface_flux = (Trixi.flux_energy_central, FluxPlusDissipation(Trixi.flux_noncon_empty, DissipationMatrixWintersEtal()))
 equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D((1.6, 1.6), (25.0, 1.0), (-25.0, 1.0), speed_of_light, permittivity, 1.0, 1.0)
 coordinates_min = (0.0, 0.0)
 coordinates_max = (4*pi, 4*pi)
 
-basis = LobattoLegendreBasis(4)
-mesh = TreeMesh(coordinates_min, coordinates_max, periodicity = true, initial_refinement_level = 7, n_cells_max = 10^8)
+basis = LobattoLegendreBasis(2)
+mesh = TreeMesh(coordinates_min, coordinates_max, periodicity = true, initial_refinement_level = 6, n_cells_max = 10^8)
 
 indicator_sc = IndicatorHennemannGassner(equation, basis,
                                          alpha_max = 0.5,
@@ -83,7 +83,7 @@ volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
                                                  volume_flux_dg = volume_flux,
                                                  volume_flux_fv = surface_flux)
 
-solver = DGSEM(basis, surface_flux, volume_integral) #VolumeIntegralFluxDifferencing(volume_flux))
+solver = DGSEM(basis, surface_flux, VolumeIntegralFluxDifferencing(volume_flux))
 semi = SemidiscretizationHyperbolic(mesh, equation,
                                     initial_condition_orszag_tang, solver, source_terms = Trixi.source_term_lorentz_corrected_2)
 
@@ -106,13 +106,13 @@ amr_callback = AMRCallback(semi, amr_controller,
 analysis_interval = 100
 analysis_callback = AnalysisCallback(semi, interval = analysis_interval,
                                      save_analysis = true,
-                                     output_directory = "out_alt_2"
+                                     output_directory = "out_diss_test"
                                      )
 save_solution = SaveSolutionCallback(dt = 0.5,
                                      save_initial_solution = true,
                                      save_final_solution = true,
                                      solution_variables = cons2prim,
-                                     output_directory = "out_alt_2",
+                                     output_directory = "out_diss_test",
                                      extra_node_variables = (:current_density_z,)
                                     )
 cfl = 1.0
@@ -121,7 +121,7 @@ tspan = (0.0, 30.0)
 ode = semidiscretize(semi, tspan)
 summary_callback = SummaryCallback()
 stepsize_callback = StepsizeCallback(cfl = cfl)
-callbacks = CallbackSet(summary_callback, analysis_callback, save_solution, amr_callback)
+callbacks = CallbackSet(summary_callback, analysis_callback, save_solution)
 ###############################################################################
 # run the simulation
 #=
