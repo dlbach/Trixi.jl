@@ -110,8 +110,8 @@ function source_terms_convergence(u, x, t, equations::Trixi.GlmMultiFluid5Moment
 end
 
 
-volume_flux = (Trixi.flux_energy_central, Trixi.flux_noncon_empty)
-surface_flux = (Trixi.flux_energy_central, FluxPlusDissipation(Trixi.flux_noncon_empty, DissipationMatrixWintersEtal()))
+volume_flux = (Trixi.flux_energy_central, Trixi.flux_empty)
+surface_flux = (Trixi.flux_energy_central, Trixi.flux_euler_dissipation_noncon)
 equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D(1.4, 1.0, 1.0, 10.0, 0.01)
 mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), periodicity = true, initial_refinement_level = 2, n_cells_max = 10^7)
 solver = DGSEM(polydeg = 3, surface_flux = surface_flux, volume_integral = VolumeIntegralFluxDifferencing(volume_flux))

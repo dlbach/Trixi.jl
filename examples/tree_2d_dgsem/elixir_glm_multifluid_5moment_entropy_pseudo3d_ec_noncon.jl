@@ -14,8 +14,8 @@ using Trixi
     return u + v
 end
 
-volume_flux = (Trixi.flux_energy_central, Trixi.flux_noncon_empty)
-surface_flux = (Trixi.flux_energy_central, FluxPlusDissipation(Trixi.flux_noncon_empty, DissipationMatrixWintersEtal()))
+volume_flux = (Trixi.flux_energy_central, Trixi.flux_empty)
+surface_flux = (Trixi.flux_energy_central, Trixi.flux_euler_dissipation_noncon)
 equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D((1.6, 1.6), (1.0, 1.0), (1.0, -1.0), 10, 0.01)
 mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0), periodicity = true, initial_refinement_level = 2, n_cells_max = 10^4)
 basis = LobattoLegendreBasis(2)
@@ -31,7 +31,7 @@ volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
 =#
 solver = DGSEM(basis, surface_flux, VolumeIntegralFluxDifferencing(volume_flux))
 semi = SemidiscretizationHyperbolic(mesh, equation,
-                                    initial_condition_ec, solver, source_terms = Trixi.source_term_lorentz_corrected)
+                                    initial_condition_ec, solver)#, source_terms = Trixi.source_term_lorentz_corrected_2)
 
 ###############################################################################
 # ODE solvers, callbacks etc.

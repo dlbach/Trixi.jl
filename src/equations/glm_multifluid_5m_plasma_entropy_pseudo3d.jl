@@ -120,12 +120,19 @@ end
 end
 
 # Convert conservative variables to entropy variables
-@inline function cons2entropy(u, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+@inline function cons2entropy_(u, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
     entropy_euler = SVector(ntuple(i -> cons2entropy_euler(u, i, equations), ncomponents(equations)))
     entropy_glm = SVector(u[end-7]*equations.permittivity, u[end-6]*equations.permittivity, 
                           u[end-5]*equations.permittivity, u[end-4]/equations.permeability, 
                           u[end-3]/equations.permeability, u[end-2]/equations.permeability,
                           u[end-1]/equations.permeability, u[end]*equations.permittivity)
+    return vcat(reduce(vcat, entropy_euler), entropy_glm)
+end
+
+# Convert conservative variables to entropy variables
+@inline function cons2entropy(u, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    entropy_euler = SVector(ntuple(i -> SVector(0,0,0,0,1), ncomponents(equations)))
+    entropy_glm = SVector(0,0,0,0,0,0,0,0)
     return vcat(reduce(vcat, entropy_euler), entropy_glm)
 end
 
@@ -342,6 +349,15 @@ end
     return vcat(reduce(vcat, fluxes_euler), flux_glm)
 end
 
+@inline function flux_euler_dissipation_noncon(u_ll, u_rr, orientation::Integer,
+                              equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    prim_ll = cons2prim(u_ll, equations)
+    prim_rr = cons2prim(u_rr, equations)
+    fluxes_euler = SVector(ntuple(i -> flux_euler_dissipation_noncon(prim_ll, prim_rr, orientation, i, equations), ncomponents(equations)))
+    flux_glm = SVector(0, 0, 0, 0, 0, 0, 0, 0)
+    return vcat(reduce(vcat, fluxes_euler), flux_glm)
+end
+
 @inline function flux_energy_upwind(u_ll, u_rr, orientation_or_normal_direction, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
     prim_ll = cons2prim(u_ll, equations)
     prim_rr = cons2prim(u_rr, equations)
@@ -362,15 +378,19 @@ end
     return 0.5f0 * (flux_euler(u_ll, orientation_or_normal_direction, i, equations) + flux_euler(u_rr, orientation_or_normal_direction, i, equations))
 end
 
-@inline function (dissipation::DissipationMatrixWintersEtal)(u_ll, u_rr,
-                                                             normal_direction::AbstractVector,
-                                                             equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+@inline function flux_energy_central_noncon(u_ll, u_rr, orientation_or_normal_direction, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
     prim_ll = cons2prim(u_ll, equations)
     prim_rr = cons2prim(u_rr, equations)
-    fluxes_euler = SVector(ntuple(i -> flux_euler_noncon_dissipation_winters_etal(prim_ll, prim_rr, normal_direction, i, equations), ncomponents(equations)))
-    return vcat(reduce(vcat, fluxes_euler), zeros(SVector{8, typeof(equations.gammas[1])}))
+    fluxes_euler = SVector(ntuple(i -> flux_euler_energy_con(prim_ll, prim_rr, orientation_or_normal_direction, i, equations), ncomponents(equations)))
+    flux_glm = flux_glm_central(u_ll, u_rr, orientation_or_normal_direction, equations)
+    f1 = flux_ranocha_transformed(u_ll, u_ll, orientation_or_normal_direction, 1, equations)
+    f2 = flux_euler(u_ll, orientation_or_normal_direction, 1, equations)
+    println(f1)
+    println(f2)
+    println(f1./f2)
+    println()
+    return vcat(reduce(vcat, fluxes_euler), flux_glm)
 end
-    
 
 """
     flux_euler_energy_con(u_ll, u_rr, orientation::Integer, i::Integer,
@@ -417,6 +437,30 @@ end
 
     return SVector(f1, f2, f3, f4, f5)
 end
+
+@inline function flux_euler_dissipation_noncon(prim_ll, prim_rr, orientation::Integer, i::Integer,
+                              equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    max_speeds_ll = max_abs_speeds(prim_ll, i, equations)          
+    max_speeds_rr = max_abs_speeds(prim_rr, i, equations)          
+    max_speed = max(max_speeds_ll[orientation], max_speeds_rr[orientation])
+    gamma_minus_one = equations.gammas[i] - 1
+
+    rho_ll, v1_ll, v2_ll, v3_ll, p_ll = view(prim_ll, (5*i-4):(5*i))
+    rho_rr, v1_rr, v2_rr, v3_rr, p_rr = view(prim_rr, (5*i-4):(5*i))
+    v1_diff = (v1_ll - v1_rr)
+    v2_diff = (v2_ll - v2_rr)
+    v3_diff = (v3_ll - v3_rr)
+    v_diff_squared = v1_diff^2 + v2_diff^2 + v3_diff^2
+    
+    f1 = 0
+    f2 = max_speed * v1_diff
+    f3 = max_speed * v2_diff
+    f4 = max_speed * v3_diff
+    f5 = -0.5f0 * max_speed * gamma_minus_one * rho_ll * v_diff_squared / p_ll
+
+    return 5*SVector(f1, f2, f3, f4, f5)
+end
+
 #=
 @inline function flux_euler_energy_con(prim_ll, prim_rr, normal_direction::AbstractVector, i::Integer,
                               equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
@@ -456,6 +500,57 @@ end
     return SVector(f1, f2, f3, f4, f5)
 end
 =#
+
+@inline function flux_ranocha_transformed(u_ll, u_rr, orientation::Integer, i::Integer,
+                              equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    # Unpack left and right state
+    rho_ll, v1_ll, v2_ll, v3_ll, p_ll = cons2prim_euler(u_ll, i, equations)
+    rho_rr, v1_rr, v2_rr, v3_rr, p_rr = cons2prim_euler(u_rr, i, equations)
+    inv_gamma_minus_one = equations.inv_gammas_minus_one[i]
+    # Compute the necessary mean values
+    rho_mean = ln_mean(rho_ll, rho_rr)
+    # Algebraically equivalent to `inv_ln_mean(rho_ll / p_ll, rho_rr / p_rr)`
+    # in exact arithmetic since
+    #     log((ϱₗ/pₗ) / (ϱᵣ/pᵣ)) / (ϱₗ/pₗ - ϱᵣ/pᵣ)
+    #   = pₗ pᵣ log((ϱₗ pᵣ) / (ϱᵣ pₗ)) / (ϱₗ pᵣ - ϱᵣ pₗ)
+    inv_rho_p_mean = p_ll * p_rr * inv_ln_mean(rho_ll * p_rr, rho_rr * p_ll)
+    v1_avg = 0.5f0 * (v1_ll + v1_rr)
+    v2_avg = 0.5f0 * (v2_ll + v2_rr)
+    v3_avg = 0.5f0 * (v3_ll + v3_rr)
+    p_avg = 0.5f0 * (p_ll + p_rr)
+    velocity_square_avg = 0.5f0 * (v1_ll * v1_rr + v2_ll * v2_rr + v3_ll * v3_rr)
+
+    # Calculate fluxes depending on orientation
+    if orientation == 1
+        f1 = rho_mean * v1_avg
+        f2 = f1 * v1_avg + p_avg
+        f3 = f1 * v2_avg
+        f4 = f1 * v3_avg
+        f5 = f1 *
+             (velocity_square_avg + inv_rho_p_mean * inv_gamma_minus_one) +
+             0.5f0 * (p_ll * v1_rr + p_rr * v1_ll)
+    else
+        f1 = rho_mean * v2_avg
+        f2 = f1 * v1_avg
+        f3 = f1 * v2_avg + p_avg
+        f4 = f1 * v3_avg
+        f5 = f1 *
+             (velocity_square_avg + inv_rho_p_mean * inv_gamma_minus_one) +
+             0.5f0 * (p_ll * v2_rr + p_rr * v2_ll)
+    end
+
+    original_flux = SVector(f1, f2, f3, f4, f5)
+    entropy_classic_ll = cons2entropy_euler_classic(view(u_ll, (5*i-4):(5*i)), equations)
+    entropy_ll = cons2entropy_euler(u_ll, i, equations)
+    test = -dot(original_flux, entropy_classic_ll)
+    #=
+    println(f5)
+    println(test)
+    println(dot(SVector(f1, f2, f3, f4, test), entropy_ll))
+    println()
+    =#
+    return SVector(f1, f2, f3, f4, test)
+end
 
 # Rotate normal vector to x-axis; normal, tangent1 and tangent2 need to be orthonormal
 # Called inside `FluxRotated` in `numerical_fluxes.jl` so the directions
@@ -594,26 +689,30 @@ end
     # Finally apply the remaining eigenvector matrix
     diss = R * diss
 
+
+
     original_dissipation = -0.5f0 * rotate_from_x(diss, normal_vector, tangent1, tangent2, equations) * norm_
     
     u_ll___ = prim2cons(prim_ll, equations)
-    #ent_ll_ = cons2entropy(u_ll___, equations)
+    ent_ll_ = cons2entropy_(u_ll___, equations)
     entropy_classic_ll_2 = cons2entropy_euler_classic(view(u_ll___, (5*i-4):(5*i)), equations)
 
-    #u_rr___ = prim2cons(prim_rr, equations)
-    #ent_rr_ = cons2entropy(u_rr___, equations)
-    #entropy_classic_rr_2 = cons2entropy_euler_classic(view(u_rr___, (5*i-4):(5*i)), equations)
+    u_rr___ = prim2cons(prim_rr, equations)
+    ent_rr_ = cons2entropy_(u_rr___, equations)
+    entropy_classic_rr_2 = cons2entropy_euler_classic(view(u_rr___, (5*i-4):(5*i)), equations)
 
     dissipation_entropy = -dot(entropy_classic_ll_2, original_dissipation)
-    #back_converted = dot(SVector(original_dissipation[1], original_dissipation[2], original_dissipation[3], original_dissipation[4], dissipation_entropy), view(ent_ll_, (5*i-4):(5*i)))
-    #dissipation_entropy_rr = -dot(entropy_classic_rr_2, original_dissipation)
-    #back_converted_rr = dot(SVector(original_dissipation[1], original_dissipation[2], original_dissipation[3], original_dissipation[4], dissipation_entropy_rr), view(ent_rr_, (5*i-4):(5*i)))
+    back_converted = dot(SVector(original_dissipation[1], original_dissipation[2], original_dissipation[3], original_dissipation[4], dissipation_entropy), view(ent_ll_, (5*i-4):(5*i)))
+    dissipation_entropy_rr = -dot(entropy_classic_rr_2, original_dissipation)
+    back_converted_rr = dot(SVector(original_dissipation[1], original_dissipation[2], original_dissipation[3], original_dissipation[4], dissipation_entropy_rr), view(ent_rr_, (5*i-4):(5*i)))
     #=
     println(original_dissipation[5])
     println(back_converted)
     println(back_converted_rr)
     println()
+    
     =#
+
     return SVector(original_dissipation[1], original_dissipation[2], 
                    original_dissipation[3], original_dissipation[4], dissipation_entropy)
 
@@ -809,7 +908,7 @@ norm_ = norm(normal_direction)
 
 end
 
-@inline flux_noncon_empty(u_ll, u_rr, orientation_or_normal_direction, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D) = zeros(SVector{nvariables(equations), typeof(equations.gammas[1])})
+@inline flux_empty(u_ll, u_rr, orientation_or_normal_direction, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D) = zeros(SVector{nvariables(equations), typeof(equations.gammas[1])})
 
 @inline function flux_glm_upwind(
     u_ll,
@@ -904,6 +1003,12 @@ end
 @inline function flux_glm_central(u_ll, u_rr, orientation_or_normal_direction,
                               equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
     return 0.5f0 * (flux_glm_maxwell(u_ll, orientation_or_normal_direction, equations) + flux_glm_maxwell(u_rr, orientation_or_normal_direction, equations))
+end
+
+@inline function max_abs_speeds(prim, i, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+    rho, v1, v2, v3, p = view(prim, (5*(i-1)+1):(5*i))
+    c = sqrt(equations.gammas[i] * p / rho)
+    return abs(v1) + c, abs(v2) + c, abs(v3) + c
 end
 
 min_max_speed_naive(u_ll, u_rr, orientation::Integer, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D) =

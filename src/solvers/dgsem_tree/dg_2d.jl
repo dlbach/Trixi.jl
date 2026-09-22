@@ -580,7 +580,7 @@ function calc_interface_flux!(surface_flux_values,
 
             # Compute both nonconservative fluxes
             noncons_left = nonconservative_flux(u_ll, u_rr, orientation, equations)
-            noncons_right = nonconservative_flux(u_rr, u_ll, orientation, equations)
+            noncons_right = -nonconservative_flux(u_rr, u_ll, orientation, equations)
 
             # Copy flux to left and right element storage
             for v in eachvariable(equations)

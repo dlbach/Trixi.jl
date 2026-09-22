@@ -65,14 +65,14 @@ end
 
 speed_of_light = 10.0
 permittivity = inv(speed_of_light^2)
-volume_flux = (Trixi.flux_energy_central, Trixi.flux_noncon_empty)
-surface_flux = (Trixi.flux_energy_central, FluxPlusDissipation(Trixi.flux_noncon_empty, DissipationMatrixWintersEtal()))
+volume_flux = (Trixi.flux_energy_central, Trixi.flux_empty)
+surface_flux = (Trixi.flux_energy_central, Trixi.flux_euler_dissipation_noncon)
 equation = Trixi.GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D((1.6, 1.6), (25.0, 1.0), (-25.0, 1.0), speed_of_light, permittivity, 1.0, 1.0)
 coordinates_min = (0.0, 0.0)
 coordinates_max = (4*pi, 4*pi)
 
 basis = LobattoLegendreBasis(2)
-mesh = TreeMesh(coordinates_min, coordinates_max, periodicity = true, initial_refinement_level = 6, n_cells_max = 10^8)
+mesh = TreeMesh(coordinates_min, coordinates_max, periodicity = true, initial_refinement_level = 5, n_cells_max = 10^8)
 
 indicator_sc = IndicatorHennemannGassner(equation, basis,
                                          alpha_max = 0.5,
@@ -106,13 +106,13 @@ amr_callback = AMRCallback(semi, amr_controller,
 analysis_interval = 100
 analysis_callback = AnalysisCallback(semi, interval = analysis_interval,
                                      save_analysis = true,
-                                     output_directory = "out_diss_test"
+                                     output_directory = "out_diss_test_2"
                                      )
 save_solution = SaveSolutionCallback(dt = 0.5,
                                      save_initial_solution = true,
                                      save_final_solution = true,
                                      solution_variables = cons2prim,
-                                     output_directory = "out_diss_test",
+                                     output_directory = "out_diss_test_2",
                                      extra_node_variables = (:current_density_z,)
                                     )
 cfl = 1.0
