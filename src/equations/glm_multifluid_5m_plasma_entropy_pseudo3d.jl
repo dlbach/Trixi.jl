@@ -120,7 +120,7 @@ end
 end
 
 # Convert conservative variables to entropy variables
-@inline function cons2entropy_(u, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+@inline function cons2entropy(u, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
     entropy_euler = SVector(ntuple(i -> cons2entropy_euler(u, i, equations), ncomponents(equations)))
     entropy_glm = SVector(u[end-7]*equations.permittivity, u[end-6]*equations.permittivity, 
                           u[end-5]*equations.permittivity, u[end-4]/equations.permeability, 
@@ -130,7 +130,7 @@ end
 end
 
 # Convert conservative variables to entropy variables
-@inline function cons2entropy(u, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+@inline function cons2entropy_(u, equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
     entropy_euler = SVector(ntuple(i -> SVector(0,0,0,0,1), ncomponents(equations)))
     entropy_glm = SVector(0,0,0,0,0,0,0,0)
     return vcat(reduce(vcat, entropy_euler), entropy_glm)
@@ -354,7 +354,7 @@ end
     prim_ll = cons2prim(u_ll, equations)
     prim_rr = cons2prim(u_rr, equations)
     fluxes_euler = SVector(ntuple(i -> flux_euler_dissipation_noncon(prim_ll, prim_rr, orientation, i, equations), ncomponents(equations)))
-    flux_glm = SVector(0, 0, 0, 0, 0, 0, 0, 0)
+    flux_glm = flux_maxwell_dissipation(prim_ll, prim_rr, orientation, equations)
     return vcat(reduce(vcat, fluxes_euler), flux_glm)
 end
 
@@ -447,18 +447,71 @@ end
 
     rho_ll, v1_ll, v2_ll, v3_ll, p_ll = view(prim_ll, (5*i-4):(5*i))
     rho_rr, v1_rr, v2_rr, v3_rr, p_rr = view(prim_rr, (5*i-4):(5*i))
-    v1_diff = (v1_ll - v1_rr)
-    v2_diff = (v2_ll - v2_rr)
-    v3_diff = (v3_ll - v3_rr)
+    v1_diff = v1_ll - v1_rr
+    v2_diff = v2_ll - v2_rr
+    v3_diff = v3_ll - v3_rr
+    rho_diff = rho_ll - rho_rr
+    rho_avg =  0.5f0 * (rho_ll + rho_rr)
+    rho_v1_diff = rho_ll * v1_ll - rho_rr * v1_rr 
+    rho_v2_diff = rho_ll * v2_ll - rho_rr * v2_rr 
+    rho_v3_diff = rho_ll * v3_ll - rho_rr * v3_rr 
     v_diff_squared = v1_diff^2 + v2_diff^2 + v3_diff^2
     
-    f1 = 0
-    f2 = max_speed * v1_diff
-    f3 = max_speed * v2_diff
-    f4 = max_speed * v3_diff
-    f5 = -0.5f0 * max_speed * gamma_minus_one * rho_ll * v_diff_squared / p_ll
+    f1 = 0#max_speed * rho_diff
+    f2 = max_speed * rho_avg * v1_diff
+    f3 = max_speed * rho_avg * v2_diff
+    f4 = max_speed * rho_avg * v3_diff
+    f5 = -0.5f0 * max_speed * gamma_minus_one * rho_ll^2 * ( v_diff_squared ) / p_ll
 
-    return 5*SVector(f1, f2, f3, f4, f5)
+    return SVector(f1, f2, f3, f4, f5)
+end
+
+@inline function flux_maxwell_dissipation(prim_ll, prim_rr, orientation::Integer,
+                              equations::GlmMultiFluid5MomentPlasmaEquationsEntropyPseudo3D)
+
+    E1_diff = (prim_ll[end-7] - prim_rr[end-7])
+    E2_diff = (prim_ll[end-6] - prim_rr[end-6])
+    E3_diff = (prim_ll[end-5] - prim_rr[end-5])
+    B1_diff = (prim_ll[end-4] - prim_rr[end-4])
+    B2_diff = (prim_ll[end-3] - prim_rr[end-3])
+    B3_diff = (prim_ll[end-2] - prim_rr[end-2])
+    psi_E_diff = (prim_ll[end-1] - prim_rr[end-1])
+    psi_B_diff = (prim_ll[end] - prim_rr[end])
+
+    c = equations.speed_of_light
+    c_sqr = equations.c_sqr
+    max_speed = max(1, equations.c_e, equations.c_b) * c
+    pt = equations.permittivity
+    pm = equations.permeability 
+    #=
+    if orientation == 1
+        f1 = 0
+        f2 = B3_diff
+        f3 = -B2_diff
+        f4 = 0
+        f5 = -E3_diff / c_sqr
+        f6 = E2_diff / c_sqr
+    else
+        f1 = -B3_diff
+        f2 = 0
+        f3 = B1_diff
+        f4 = E3_diff / c_sqr
+        f5 = 0
+        f6 = -E1_diff / c_sqr
+    end
+    =#
+    
+    f1 = 0
+    f2 = 0
+    f3 = 0
+    f4 = 0
+    f5 = 0
+    f6 = 0
+    
+    f7 = 0
+    f8 = 0
+    
+    return SVector(f1, f2, f3, f4, f5, f6, f7, f8)
 end
 
 #=

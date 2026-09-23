@@ -72,7 +72,7 @@ coordinates_min = (0.0, 0.0)
 coordinates_max = (4*pi, 4*pi)
 
 basis = LobattoLegendreBasis(2)
-mesh = TreeMesh(coordinates_min, coordinates_max, periodicity = true, initial_refinement_level = 5, n_cells_max = 10^8)
+mesh = TreeMesh(coordinates_min, coordinates_max, periodicity = true, initial_refinement_level = 7, n_cells_max = 10^8)
 
 indicator_sc = IndicatorHennemannGassner(equation, basis,
                                          alpha_max = 0.5,

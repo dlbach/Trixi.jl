@@ -31,7 +31,7 @@ volume_integral = VolumeIntegralShockCapturingHG(indicator_sc;
 =#
 solver = DGSEM(basis, surface_flux, VolumeIntegralFluxDifferencing(volume_flux))
 semi = SemidiscretizationHyperbolic(mesh, equation,
-                                    initial_condition_ec, solver)#, source_terms = Trixi.source_term_lorentz_corrected_2)
+                                    initial_condition_ec, solver, source_terms = Trixi.source_term_lorentz_corrected_2)
 
 ###############################################################################
 # ODE solvers, callbacks etc.
@@ -41,7 +41,7 @@ analysis_callback = AnalysisCallback(semi, interval = analysis_interval,
                                      save_analysis = true, output_directory="out",
                                      analysis_filename="analysis.dat")
 
-cfl = 0.001
+cfl = 0.01
 tspan = (0.0, 1.0)
 
 ode = semidiscretize(semi, tspan)
